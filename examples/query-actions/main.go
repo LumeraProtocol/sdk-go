@@ -12,6 +12,7 @@ import (
 	"github.com/LumeraProtocol/sdk-go/blockchain"
 	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
+	"github.com/LumeraProtocol/sdk-go/types"
 )
 
 func expandPath(p string) string {
@@ -92,6 +93,18 @@ func main() {
 		fmt.Printf("  Type: %s\n", action.Type)
 		fmt.Printf("  State: %s\n", action.State)
 		fmt.Printf("  Price: %s\n", action.Price)
+
+		if action.Metadata != nil {
+			switch action.Metadata.Type() {
+			case types.ActionTypeCascade:
+				cascadeMeta := action.Metadata.(*types.CascadeMetadata)
+				fmt.Println("FileName:", cascadeMeta.FileName)
+				fmt.Println("Public:", cascadeMeta.Public)
+			case types.ActionTypeSense:
+				senseMeta := action.Metadata.(*types.SenseMetadata)
+				fmt.Println("DataHash:", senseMeta.DataHash)
+			}
+		}
 		return
 	}
 
