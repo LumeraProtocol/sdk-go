@@ -3,6 +3,7 @@ package blockchain
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/types"
@@ -16,7 +17,7 @@ type ActionClient struct {
 // GetAction retrieves an action by ID
 func (a *ActionClient) GetAction(ctx context.Context, actionID string) (*types.Action, error) {
 	resp, err := a.query.GetAction(ctx, &actiontypes.QueryGetActionRequest{
-		ActionId: actionID,
+		ActionID: actionID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get action: %w", err)
@@ -51,11 +52,20 @@ func (a *ActionClient) ListActions(ctx context.Context, opts ...QueryOption) ([]
 // GetActionFee calculates the fee for an action based on data size
 func (a *ActionClient) GetActionFee(ctx context.Context, dataSize int64) (string, error) {
 	resp, err := a.query.GetActionFee(ctx, &actiontypes.QueryGetActionFeeRequest{
-		DataSize: dataSize,
+		DataSize: strconv.FormatInt(dataSize, 10),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to get action fee: %w", err)
 	}
 
 	return resp.Amount, nil
+}
+
+
+// ListActionsByType provides a convenience wrapper accepting actionType as a string with pagination.
+func (a *ActionClient) ListActionsByType(ctx context.Context, actionType string, limit, offset uint64) ([]*types.Action, error) {
+	return a.ListActions(ctx,
+		WithActionTypeStr(actionType),
+		WithPagination(limit, offset),
+	)
 }

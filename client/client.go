@@ -7,14 +7,14 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 
 	"github.com/LumeraProtocol/sdk-go/blockchain"
-	"github.com/LumeraProtocol/sdk-go/storage"
+	"github.com/LumeraProtocol/sdk-go/cascade"
 )
 
 // Client provides unified access to Lumera blockchain and storage
 type Client struct {
 	// High-level modules
 	Blockchain *blockchain.Client
-	Storage    *storage.Client
+	Cascade    *cascade.Client
 
 	// Configuration
 	config  *Config
@@ -45,8 +45,8 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 		return nil, fmt.Errorf("failed to initialize blockchain client: %w", err)
 	}
 
-	// Initialize storage client (wraps SuperNode SDK)
-	storageClient, err := storage.New(ctx, storage.Config{
+	// Initialize cascade client (wraps SuperNode SDK)
+	cascadeClient, err := cascade.New(ctx, cascade.Config{
 		ChainID:  cfg.ChainID,
 		GRPCAddr: cfg.GRPCAddr,
 		Address:  cfg.Address,
@@ -55,12 +55,12 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 	}, kr)
 	if err != nil {
 		blockchainClient.Close()
-		return nil, fmt.Errorf("failed to initialize storage client: %w", err)
+		return nil, fmt.Errorf("failed to initialize cascade client: %w", err)
 	}
 
 	return &Client{
 		Blockchain: blockchainClient,
-		Storage:    storageClient,
+		Cascade:    cascadeClient,
 		config:     &cfg,
 		keyring:    kr,
 	}, nil
@@ -76,9 +76,9 @@ func (c *Client) Close() error {
 		}
 	}
 
-	if c.Storage != nil {
-		if err := c.Storage.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("storage close: %w", err))
+	if c.Cascade != nil {
+		if err := c.Cascade.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("cascade close: %w", err))
 		}
 	}
 

@@ -2,29 +2,71 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
-	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
 )
+
+func expandPath(p string) string {
+	if p == "" {
+		return p
+	}
+	if strings.HasPrefix(p, "~") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			if p == "~" {
+				return home
+			}
+			if strings.HasPrefix(p, "~/") {
+				return filepath.Join(home, p[2:])
+			}
+		}
+	}
+	return p
+}
+
+func adjustKeyringDir(base, backend string) string {
+	if backend == "file" || backend == "test" {
+		return filepath.Join(base, "keyring-"+backend)
+	}
+	return base
+}
 
 func main() {
 	ctx := context.Background()
 
-	// Initialize keyring
-	kr, err := keyring.New("lumera", "test", os.TempDir(), nil)
+	grpcEndpoint := flag.String("grpc-endpoint", "localhost:9090", "Lumera gRPC endpoint")
+	chainID := flag.String("chain-id", "lumera-testnet-2", "Chain ID")
+	keyringBackend := flag.String("keyring-backend", "os", "Keyring backend: os|file|test")
+	keyringDir := flag.String("keyring-dir", "~/.lumera", "Keyring base directory (actual dir appends keyring-<backend> for file/test)")
+	keyName := flag.String("key-name", "my-key", "Key name in the keyring")
+	address := flag.String("address", "lumera1abc...", "Your Lumera address")
+	flag.Parse()
+
+	baseDir := expandPath(*keyringDir)
+	actualDir := adjustKeyringDir(baseDir, *keyringBackend)
+	params := sdkcrypto.KeyringParams{
+		AppName: "lumera",
+		Backend: *keyringBackend,
+		Dir:     actualDir,
+		Input:   nil,
+	}
+	kr, err := sdkcrypto.NewKeyring(params)
 	if err != nil {
 		log.Fatalf("Failed to create keyring: %v", err)
 	}
 
-	// Create unified client
 	client, err := lumerasdk.New(ctx, lumerasdk.Config{
-		ChainID:  "lumera-testnet-2",
-		GRPCAddr: "localhost:9090",
-		Address:  "lumera1abc...", // Your address
-		KeyName:  "my-key",
+		ChainID:  *chainID,
+		GRPCAddr: *grpcEndpoint,
+		Address:  *address,
+		KeyName:  *keyName,
 	}, kr)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
@@ -33,8 +75,5 @@ func main() {
 
 	fmt.Println("Claim tokens example - to be implemented")
 	fmt.Println("This example will demonstrate claiming tokens from the old chain")
-
-	// TODO: Implement claim token logic once claim module methods are available
-	// Example:
-	// result, err := client.Blockchain.Claim.ClaimTokens(ctx, ...)
+	// TODO: Implement claim token logic once claim module methods are available.
 }

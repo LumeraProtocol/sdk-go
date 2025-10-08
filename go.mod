@@ -15,7 +15,7 @@ require (
 
 	// Cosmos SDK dependencies
 	github.com/cosmos/cosmos-sdk v0.50.13
-	github.com/cosmos/gogoproto v1.7.0 // indirect
+	github.com/cosmos/gogoproto v1.7.0
 
 	// gRPC and networking
 	google.golang.org/grpc v1.76.0
@@ -25,7 +25,11 @@ require (
 )
 
 require (
-	cosmossdk.io/api v0.9.2 // indirect
+	cosmossdk.io/api v0.9.2
+	google.golang.org/protobuf v1.36.10
+)
+
+require (
 	cosmossdk.io/collections v1.2.1 // indirect
 	cosmossdk.io/core v0.11.3 // indirect
 	cosmossdk.io/depinject v1.2.1 // indirect
@@ -170,7 +174,6 @@ require (
 	google.golang.org/genproto v0.0.0-20241118233622-e639e219e697 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250804133106-a7a43d27e69b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251007200510-49b9836ed3ff // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 	nhooyr.io/websocket v1.8.10 // indirect
@@ -187,9 +190,6 @@ require (
 // 	github.com/LumeraProtocol/lumera/x/audit => ../lumera/x/audit
 // 	github.com/LumeraProtocol/supernode/v2 => ../supernode
 // )
-
-// Force compatible sonic version
-replace github.com/bytedance/sonic => github.com/bytedance/sonic v1.11.9
 
 // Keep your other replaces...
 replace github.com/cometbft/cometbft => github.com/cometbft/cometbft v0.38.12

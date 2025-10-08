@@ -22,17 +22,17 @@ func (s *SuperNodeClient) GetSuperNode(ctx context.Context, validatorAddr string
 		return nil, fmt.Errorf("failed to get supernode: %w", err)
 	}
 
-	return types.SuperNodeFromProto(resp.SuperNode), nil
+	return types.SuperNodeFromProto(resp.Supernode), nil
 }
 
 // GetTopSuperNodesForBlock retrieves top supernodes for a specific block
-func (s *SuperNodeClient) GetTopSuperNodesForBlock(ctx context.Context, blockHeight int64) ([]string, error) {
-	resp, err := s.query.GetTopSupernodeForBlock(ctx, &supernodetypes.QueryGetTopSupernodeForBlockRequest{
+func (s *SuperNodeClient) GetTopSuperNodesForBlock(ctx context.Context, blockHeight int32) ([]*supernodetypes.SuperNode, error) {
+	resp, err := s.query.GetTopSuperNodesForBlock(ctx, &supernodetypes.QueryGetTopSuperNodesForBlockRequest{
 		BlockHeight: blockHeight,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get top supernodes: %w", err)
 	}
 
-	return resp.SupernodeAddresses, nil
+	return resp.Supernodes, nil
 }

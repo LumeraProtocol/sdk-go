@@ -1,0 +1,107 @@
+package cascade
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/LumeraProtocol/sdk-go/types"
+)
+
+// UploadOptions configures cascade upload
+type UploadOptions struct {
+	Public   bool
+	FileName string
+}
+
+// UploadOption is a functional option for Upload
+type UploadOption func(*UploadOptions)
+
+// WithPublic sets the public flag
+func WithPublic(public bool) UploadOption {
+	return func(o *UploadOptions) {
+		o.Public = public
+	}
+}
+
+// WithFileName sets a custom filename
+func WithFileName(name string) UploadOption {
+	return func(o *UploadOptions) {
+		o.FileName = name
+	}
+}
+
+// Upload uploads a file using Cascade
+func (c *Client) Upload(ctx context.Context, filePath string, actionID string, opts ...UploadOption) (*types.CascadeResult, error) {
+	// Apply options
+	options := &UploadOptions{
+		Public: false,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// Create a file signature
+	signature, err := c.snClient.GenerateStartCascadeSignatureFromFile(ctx, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create signature: %w", err)
+	}
+
+	// Start cascade upload via SuperNode SDK
+	taskID, err := c.snClient.StartCascade(ctx, filePath, actionID, signature)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start cascade: %w", err)
+	}
+
+	// Wait for task completion
+	task, err := c.tasks.Wait(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("cascade failed: %w", err)
+	}
+
+	return &types.CascadeResult{
+		ActionID: actionID,
+		TaskID:   taskID,
+		FileHash: task.FileHash,
+	}, nil
+}
+
+// DownloadOptions configures cascade download
+type DownloadOptions struct {
+	// Add download options as needed
+}
+
+// DownloadOption is a functional option for Download
+type DownloadOption func(*DownloadOptions)
+
+// Download downloads a file from Cascade
+func (c *Client) Download(ctx context.Context, actionID string, outputDir string, opts ...DownloadOption) (*types.DownloadResult, error) {
+	// Apply options
+	options := &DownloadOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// Create download signature
+	signature, err := c.snClient.GenerateDownloadSignature(ctx, actionID, c.config.Address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create signature: %w", err)
+	}
+
+	// Start download via SuperNode SDK
+	taskID, err := c.snClient.DownloadCascade(ctx, actionID, outputDir, signature)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start download: %w", err)
+	}
+
+	// Wait for completion
+	task, err := c.tasks.Wait(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("download failed: %w", err)
+	}
+
+	return &types.DownloadResult{
+		ActionID:   actionID,
+		TaskID:     taskID,
+		OutputPath: task.OutputPath,
+	}, nil
+}

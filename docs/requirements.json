@@ -1,0 +1,322 @@
+{
+  "project": {
+    "name": "Lumera Go SDK",
+    "repository": "github.com/LumeraProtocol/sdk-go",
+    "description": "Official Go SDK for Lumera Protocol - unified interface for blockchain and storage operations",
+    "version": "0.1.0",
+    "go_version": "1.21"
+  },
+  "objectives": {
+    "primary": [
+      "Provide unified client for Lumera blockchain and SuperNode storage operations",
+      "Simplify integration for Go developers building on Lumera",
+      "Abstract complexity of multi-layer architecture (blockchain + storage)",
+      "Enable high-level operations with minimal boilerplate code"
+    ],
+    "secondary": [
+      "Maintain type safety across all operations",
+      "Provide comprehensive examples and documentation",
+      "Support both testnet and mainnet configurations",
+      "Enable easy migration from direct blockchain/SuperNode SDK usage"
+    ]
+  },
+  "architecture": {
+    "design_pattern": "Unified client with modular sub-clients",
+    "layers": [
+      {
+        "name": "Client Layer",
+        "location": "client/",
+        "responsibility": "Main entry point, configuration, lifecycle management",
+        "components": ["Client", "Config", "Options"]
+      },
+      {
+        "name": "Blockchain Layer",
+        "location": "blockchain/",
+        "responsibility": "Blockchain query and transaction operations",
+        "components": [
+          "ActionClient",
+          "SuperNodeClient",
+          "ClaimClient",
+          "AuditClient",
+          "QueryHelpers",
+          "TxBuilder"
+        ]
+      },
+      {
+        "name": "Storage Layer",
+        "location": "storage/",
+        "responsibility": "Off-chain storage operations via SuperNode network",
+        "components": [
+          "CascadeClient",
+          "TaskManager",
+          "EventSubscriptions"
+        ]
+      },
+      {
+        "name": "Types Layer",
+        "location": "types/",
+        "responsibility": "SDK-specific type definitions and conversions",
+        "components": [
+          "Action types",
+          "SuperNode types",
+          "Result types",
+          "Error types"
+        ]
+      },
+      {
+        "name": "Internal Layer",
+        "location": "internal/",
+        "responsibility": "Internal utilities and helpers",
+        "components": [
+          "gRPC connection management",
+          "Signature utilities",
+          "Hash utilities"
+        ]
+      }
+    ]
+  },
+  "dependencies": {
+    "direct": {
+      "blockchain_types": {
+        "packages": [
+          "github.com/LumeraProtocol/lumera/x/action",
+          "github.com/LumeraProtocol/lumera/x/supernode",
+          "github.com/LumeraProtocol/lumera/x/claim",
+          "github.com/LumeraProtocol/lumera/x/audit"
+        ],
+        "source": "Direct import from lumera repo (Go modules)",
+        "note": "No proto generation needed - imports generated Go code directly"
+      },
+      "storage_sdk": {
+        "package": "github.com/LumeraProtocol/supernode/v2/sdk",
+        "purpose": "SuperNode operations wrapper",
+        "note": "Wrapped by storage layer for unified API"
+      },
+      "cosmos_sdk": {
+        "package": "github.com/cosmos/cosmos-sdk",
+        "version": "v0.50.10",
+        "purpose": "Cosmos SDK types, keyring, transaction building"
+      },
+      "cometbft": {
+        "package": "github.com/cometbft/cometbft",
+        "version": "v0.38.12",
+        "note": "MUST be v0.38.x for Cosmos SDK v0.50.x compatibility"
+      },
+      "grpc": {
+        "package": "google.golang.org/grpc",
+        "purpose": "gRPC client for blockchain communication"
+      },
+      "blake3": {
+        "package": "lukechampine.com/blake3",
+        "purpose": "File hashing for signatures"
+      }
+    },
+    "version_constraints": {
+      "cosmos_sdk": "v0.50.x",
+      "cometbft": "v0.38.x (NOT v1.x)",
+      "go": "1.21+",
+      "sonic": "v1.11.9 (NOT v1.13.2 due to build issues)"
+    }
+  },
+  "features": {
+    "blockchain_operations": {
+      "queries": [
+        "Get action by ID",
+        "List actions with filters (type, state, pagination)",
+        "Get action fee calculation",
+        "Get SuperNode information",
+        "Get top SuperNodes for block height",
+        "List SuperNodes",
+        "Query claim records",
+        "Query audit evidence"
+      ],
+      "transactions": [
+        "Request action (Cascade/Sense)",
+        "Finalize action",
+        "Approve action",
+        "Claim tokens",
+        "Register SuperNode (future)",
+        "Submit audit evidence (future)"
+      ],
+      "utilities": [
+        "Signature creation and verification",
+        "Fee calculation",
+        "Transaction simulation",
+        "Multi-message transactions"
+      ]
+    },
+    "storage_operations": {
+      "cascade": [
+        "Upload files to decentralized storage",
+        "Download files from storage",
+        "Track upload/download progress",
+        "Subscribe to task events",
+        "Public/private file support"
+      ],
+      "task_management": [
+        "Create and track tasks",
+        "Wait for task completion",
+        "Query task status",
+        "Delete completed tasks"
+      ],
+      "event_system": [
+        "Subscribe to specific event types",
+        "Subscribe to all events",
+        "Real-time progress updates",
+        "Error handling via events"
+      ]
+    },
+    "developer_experience": {
+      "api_design": [
+        "Fluent API with method chaining",
+        "Functional options pattern for configuration",
+        "Context-aware operations (timeouts, cancellation)",
+        "Comprehensive error messages with context"
+      ],
+      "configuration": [
+        "Default configurations for testnet/mainnet",
+        "Environment-based configuration",
+        "Flexible timeout settings",
+        "Keyring integration (test, os, file)"
+      ],
+      "type_safety": [
+        "SDK types abstract proto complexity",
+        "Type conversions handled internally",
+        "Strongly typed enums",
+        "Compile-time safety"
+      ]
+    }
+  },
+  "integration_requirements": {
+    "proto_integration": {
+      "approach": "Direct import from lumera repo",
+      "rationale": "Go modules support subpackage imports - no duplication needed",
+      "imports": [
+        "github.com/LumeraProtocol/lumera/x/action/types",
+        "github.com/LumeraProtocol/lumera/x/supernode/types",
+        "github.com/LumeraProtocol/lumera/x/claim/types",
+        "github.com/LumeraProtocol/lumera/x/audit/types"
+      ],
+      "no_proto_generation": "SDK does not generate protos - imports from lumera"
+    },
+    "supernode_sdk_integration": {
+      "package": "github.com/LumeraProtocol/supernode/v2/sdk",
+      "wrapper_location": "storage/",
+      "purpose": "Wrap SuperNode SDK with unified API",
+      "additions": [
+        "Automatic signature generation",
+        "Task lifecycle management",
+        "Unified error handling",
+        "Progress tracking"
+      ]
+    },
+    "keyring_integration": {
+      "cosmos_keyring": "Required for all signing operations",
+      "supported_backends": ["test", "os", "file", "kwallet", "pass"],
+      "usage": [
+        "Transaction signing",
+        "File signature creation",
+        "Download authorization"
+      ]
+    }
+  },
+  "quality_requirements": {
+    "testing": {
+      "unit_tests": "All public APIs must have unit tests",
+      "integration_tests": "Test blockchain + storage interactions",
+      "example_tests": "All examples must compile and have usage tests",
+      "coverage_target": "80%+"
+    },
+    "documentation": {
+      "godoc": "All public types, functions, and methods",
+      "examples": "Complete working examples for major use cases",
+      "readme": "Quick start, installation, basic usage",
+      "api_reference": "Generated from godoc comments"
+    },
+    "code_quality": {
+      "linting": "golangci-lint with default rules",
+      "formatting": "gofmt enforced",
+      "race_detection": "Tests run with -race flag",
+      "error_handling": "All errors wrapped with context"
+    },
+    "performance": {
+      "memory": "Efficient use of memory for large file operations",
+      "concurrency": "Thread-safe operations",
+      "connection_pooling": "Reuse gRPC connections",
+      "timeouts": "Configurable timeouts for all operations"
+    }
+  },
+  "versioning_strategy": {
+    "semantic_versioning": "MAJOR.MINOR.PATCH",
+    "initial_release": "v0.1.0 (beta)",
+    "stability_target": "v1.0.0 when API is stable",
+    "breaking_changes": "Major version bump",
+    "backwards_compatibility": "Maintained within major versions",
+    "deprecation_policy": "Deprecated features supported for 1 major version"
+  },
+  "release_requirements": {
+    "pre_release": [
+      "All tests passing",
+      "Examples working",
+      "Documentation complete",
+      "No known critical bugs",
+      "Version dependencies locked"
+    ],
+    "release_artifacts": [
+      "Git tag (vX.Y.Z)",
+      "GitHub release with changelog",
+      "Updated documentation",
+      "Migration guide (for breaking changes)"
+    ],
+    "compatibility_matrix": [
+      "Lumera blockchain version compatibility",
+      "SuperNode version compatibility",
+      "Go version compatibility"
+    ]
+  },
+  "future_enhancements": {
+    "planned_features": [
+      "Transaction broadcasting with retry logic",
+      "Multi-signature transaction support",
+      "Batch operations",
+      "Streaming queries",
+      "Local caching layer",
+      "Metrics and monitoring hooks",
+      "Plugin system for custom actions"
+    ],
+    "api_additions": [
+      "Sense action support (when implemented)",
+      "Agents/inference support (future)",
+      "Governance operations",
+      "Staking operations",
+      "IBC operations"
+    ]
+  },
+  "non_functional_requirements": {
+    "security": [
+      "Secure keyring handling",
+      "No private keys in logs",
+      "TLS for gRPC connections (production)",
+      "Input validation on all public APIs",
+      "Protection against replay attacks"
+    ],
+    "reliability": [
+      "Automatic retry with exponential backoff",
+      "Graceful degradation",
+      "Connection recovery",
+      "Timeout handling"
+    ],
+    "usability": [
+      "Clear error messages",
+      "Helpful defaults",
+      "Progressive disclosure (simple → advanced)",
+      "Migration guides from direct SDK usage"
+    ],
+    "maintainability": [
+      "Clear separation of concerns",
+      "Minimal external dependencies",
+      "Automated testing",
+      "Continuous integration"
+    ]
+  }
+}

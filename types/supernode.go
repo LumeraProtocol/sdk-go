@@ -31,9 +31,9 @@ func GetLatestIPAddress(history []*supernodetypes.IPAddressHistory) string {
 }
 
 // GetLatestState extracts the state with the highest height from SuperNodeStateRecord
-func GetLatestState(states []*supernodetypes.SuperNodeStateRecord) supernodetypes.SuperNodeState {
+func GetLatestState(states []*supernodetypes.SuperNodeStateRecord) *supernodetypes.SuperNodeState {
 	if len(states) == 0 {
-		return supernodetypes.SuperNodeState(0) // Return default state
+		return nil
 	}
 
 	latestIdx := 0
@@ -46,7 +46,7 @@ func GetLatestState(states []*supernodetypes.SuperNodeStateRecord) supernodetype
 		}
 	}
 
-	return states[latestIdx].State
+	return &states[latestIdx].State
 }
 
 // SuperNodeFromProto converts a proto supernode to SDK supernode
@@ -56,24 +56,20 @@ func SuperNodeFromProto(pb *supernodetypes.SuperNode) *SuperNode {
 	}
 
 	// Extract the IP address with the highest height from PrevIpAddresses
-	ipAddress := pb.IpAddress
-	if len(pb.PrevIpAddresses) > 0 {
-		latestIP := GetLatestIPAddress(pb.PrevIpAddresses)
-		if latestIP != "" {
-			ipAddress = latestIP
-		}
+	ipAddress := GetLatestIPAddress(pb.PrevIpAddresses)
+	if ipAddress == "" {
+		return nil
 	}
 
 	// Extract the state with the highest height from States
-	state := pb.State
-	if len(pb.States) > 0 {
-		latestState := GetLatestState(pb.States)
-		state = latestState
+	latestState := GetLatestState(pb.States)
+	if latestState == nil {
+		return nil
 	}
 
 	return &SuperNode{
 		ValidatorAddress: pb.ValidatorAddress,
 		IPAddress:        ipAddress,
-		State:            state.String(),
+		State:            latestState.String(),
 	}
 }

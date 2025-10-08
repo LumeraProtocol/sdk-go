@@ -3,8 +3,6 @@ package client
 import (
 	"fmt"
 	"time"
-
-	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 )
 
 // Config holds all configuration for the Lumera client
