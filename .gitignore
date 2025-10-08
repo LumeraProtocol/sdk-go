@@ -37,3 +37,7 @@ examples/*/output/
 examples/*/*.bin
 examples/*/*.txt
 
+query-actions
+cascade-upload
+cascade-download
+claim-tokens
