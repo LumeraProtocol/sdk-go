@@ -5,38 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
 
 	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
 )
-
-func expandPath(p string) string {
-	if p == "" {
-		return p
-	}
-	if strings.HasPrefix(p, "~") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			if p == "~" {
-				return home
-			}
-			if strings.HasPrefix(p, "~/") {
-				return filepath.Join(home, p[2:])
-			}
-		}
-	}
-	return p
-}
-
-func adjustKeyringDir(base, backend string) string {
-	if backend == "file" || backend == "test" {
-		return filepath.Join(base, "keyring-"+backend)
-	}
-	return base
-}
 
 func main() {
 	ctx := context.Background()
@@ -49,12 +21,10 @@ func main() {
 	address := flag.String("address", "lumera1abc...", "Your Lumera address")
 	flag.Parse()
 
-	baseDir := expandPath(*keyringDir)
-	actualDir := adjustKeyringDir(baseDir, *keyringBackend)
 	params := sdkcrypto.KeyringParams{
 		AppName: "lumera",
 		Backend: *keyringBackend,
-		Dir:     actualDir,
+		Dir:     *keyringDir,
 		Input:   nil,
 	}
 	kr, err := sdkcrypto.NewKeyring(params)

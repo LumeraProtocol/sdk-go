@@ -5,7 +5,6 @@ type CascadeResult struct {
 	ActionID string
 	TaskID   string
 	TxHash   string
-	FileHash string
 }
 
 // DownloadResult contains the result of a download operation

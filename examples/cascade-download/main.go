@@ -5,38 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 
 	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
 )
-
-func expandPath(p string) string {
-	if p == "" {
-		return p
-	}
-	if strings.HasPrefix(p, "~") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			if p == "~" {
-				return home
-			}
-			if strings.HasPrefix(p, "~/") {
-				return filepath.Join(home, p[2:])
-			}
-		}
-	}
-	return p
-}
-
-func adjustKeyringDir(base, backend string) string {
-	if backend == "file" || backend == "test" {
-		return filepath.Join(base, "keyring-"+backend)
-	}
-	return base
-}
 
 func main() {
 	ctx := context.Background()
@@ -56,17 +29,23 @@ func main() {
 		log.Fatal("action-id is required")
 	}
 
-	baseDir := expandPath(*keyringDir)
-	actualDir := adjustKeyringDir(baseDir, *keyringBackend)
 	params := sdkcrypto.KeyringParams{
 		AppName: "lumera",
 		Backend: *keyringBackend,
-		Dir:     actualDir,
+		Dir:     *keyringDir,
 		Input:   nil,
 	}
 	kr, err := sdkcrypto.NewKeyring(params)
 	if err != nil {
 		log.Fatalf("Failed to create keyring: %v", err)
+	}
+
+	key, err := sdkcrypto.GetKey(kr, *keyName)
+	if err != nil {
+		log.Fatalf("Failed to get key: %v", err)
+	}
+	if key == nil {
+		log.Fatalf("Key %s not found in keyring", *keyName)
 	}
 
 	client, err := lumerasdk.New(ctx, lumerasdk.Config{

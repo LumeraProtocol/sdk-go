@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bufio"
 	"io"
 	"os"
 	"path/filepath"
@@ -8,7 +9,9 @@ import (
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	"github.com/cosmos/cosmos-sdk/std"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
@@ -55,12 +58,17 @@ func NewKeyring(p KeyringParams) (keyring.Keyring, error) {
 		home, _ := os.UserHomeDir()
 		dir = filepath.Join(home, ".lumera")
 	}
+	in := p.Input
+	if in == nil {
+		in = bufio.NewReader(os.Stdin)
+	}
 
 	// Create a proto codec for keyring operations
 	reg := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(reg)
 	cdc := codec.NewProtoCodec(reg)
 
-	return keyring.New(app, backend, dir, p.Input, cdc)
+	return keyring.New(app, backend, dir, in, cdc)
 }
 
 // GetKey returns metadata for the named key in the provided keyring.
@@ -72,7 +80,8 @@ func GetKey(kr keyring.Keyring, keyName string) (*keyring.Record, error) {
 // registering Lumera action message interfaces as required for signing/encoding.
 func NewDefaultTxConfig() client.TxConfig {
 	reg := codectypes.NewInterfaceRegistry()
-	// Register Lumera action interfaces/messages so they can be packed/unpacked.
+	// Register crypto and module interfaces
+	cryptocodec.RegisterInterfaces(reg)
 	actiontypes.RegisterInterfaces(reg)
 
 	proto := codec.NewProtoCodec(reg)

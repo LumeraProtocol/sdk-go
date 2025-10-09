@@ -2,7 +2,6 @@ package blockchain
 
 import (
 	"encoding/json"
-	"strconv"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -13,31 +12,19 @@ import (
 func NewMsgRequestAction(
 	creator string,
 	actionType actiontypes.ActionType,
-	metadata *anypb.Any,
+	metadata string,
 	price string,
-	expirationTime int64,
-	superNodes []string,
+	expiration string,
 ) *actiontypes.MsgRequestAction {
 	// Convert ActionType enum to string
 	actionTypeStr := actionType.String()
 
-	// Convert metadata Any to JSON string
-	metadataStr := ""
-	if metadata != nil {
-		if metadataBytes, err := json.Marshal(metadata); err == nil {
-			metadataStr = string(metadataBytes)
-		}
-	}
-
-	// Convert expiration time to string
-	expirationTimeStr := strconv.FormatInt(expirationTime, 10)
-
 	return &actiontypes.MsgRequestAction{
 		Creator:        creator,
 		ActionType:     actionTypeStr,
-		Metadata:       metadataStr,
+		Metadata:       metadata,
 		Price:          price,
-		ExpirationTime: expirationTimeStr,
+		ExpirationTime: expiration,
 	}
 }
 

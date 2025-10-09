@@ -5,39 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 
-	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
 	"github.com/LumeraProtocol/sdk-go/cascade"
+	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
 )
-
-func expandPath(p string) string {
-	if p == "" {
-		return p
-	}
-	if strings.HasPrefix(p, "~") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			if p == "~" {
-				return home
-			}
-			if strings.HasPrefix(p, "~/") {
-				return filepath.Join(home, p[2:])
-			}
-		}
-	}
-	return p
-}
-
-func adjustKeyringDir(base, backend string) string {
-	if backend == "file" || backend == "test" {
-		return filepath.Join(base, "keyring-"+backend)
-	}
-	return base
-}
 
 func main() {
 	ctx := context.Background()
@@ -50,7 +23,6 @@ func main() {
 	address := flag.String("address", "lumera1abc...", "Your Lumera address")
 
 	filePath := flag.String("file-path", "", "Path to file to upload (required)")
-	actionID := flag.String("action-id", "", "Action ID to associate upload with (required)")
 	public := flag.Bool("public", true, "Whether upload is public")
 	upFileName := flag.String("file-name", "", "Optional filename override")
 	flag.Parse()
@@ -58,16 +30,11 @@ func main() {
 	if strings.TrimSpace(*filePath) == "" {
 		log.Fatal("file-path is required")
 	}
-	if strings.TrimSpace(*actionID) == "" {
-		log.Fatal("action-id is required")
-	}
 
-	baseDir := expandPath(*keyringDir)
-	actualDir := adjustKeyringDir(baseDir, *keyringBackend)
 	params := sdkcrypto.KeyringParams{
 		AppName: "lumera",
 		Backend: *keyringBackend,
-		Dir:     actualDir,
+		Dir:     *keyringDir,
 		Input:   nil,
 	}
 	kr, err := sdkcrypto.NewKeyring(params)
@@ -91,7 +58,7 @@ func main() {
 	if fn := strings.TrimSpace(*upFileName); fn != "" {
 		opts = append(opts, cascade.WithFileName(fn))
 	}
-	result, err := client.Cascade.Upload(ctx, *filePath, *actionID, opts...)
+	result, err := client.Cascade.Upload(ctx, client.Blockchain, *filePath, opts...)
 	if err != nil {
 		log.Fatalf("Upload failed: %v", err)
 	}
@@ -99,5 +66,4 @@ func main() {
 	fmt.Printf("Upload successful!\n")
 	fmt.Printf("Action ID: %s\n", result.ActionID)
 	fmt.Printf("Task ID: %s\n", result.TaskID)
-	fmt.Printf("File Hash: %s\n", result.FileHash)
 }

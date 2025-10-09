@@ -41,3 +41,6 @@ query-actions
 cascade-upload
 cascade-download
 claim-tokens
+
+docs/context.json
+docs/requirements.json
