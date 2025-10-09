@@ -124,7 +124,10 @@ func (c *Client) BuildAndSignTx(ctx context.Context, msg sdk.Msg, memo string) (
 	}
 	builder.SetGasLimit(gas)
 
-	builder.SetSignatures() // clear placeholder signature
+	err = builder.SetSignatures() // clear placeholder signature
+	if err != nil {
+		return nil, fmt.Errorf("clear placeholder signature: %w", err)
+	}
 
 	// Ensure a minimum fee to satisfy chain requirements
 	fee := int64(math.Ceil(float64(gas) / 40.0)) //the gas price is 0.025

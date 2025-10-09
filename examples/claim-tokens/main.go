@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	fmt.Println("Claim tokens example - to be implemented")
 	fmt.Println("This example will demonstrate claiming tokens from the old chain")

@@ -54,7 +54,10 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 		Timeout:  cfg.StorageTimeout,
 	}, kr)
 	if err != nil {
-		blockchainClient.Close()
+		err = blockchainClient.Close()
+		if err != nil {
+			return nil, fmt.Errorf("cascade init failed: %v; also failed to close blockchain client: %w", err, err)
+		}
 		return nil, fmt.Errorf("failed to initialize cascade client: %w", err)
 	}
 

@@ -51,7 +51,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
-	defer client.Close()
+	defer client.Close() //nolint:errcheck
 
 	fmt.Println("Uploading file...")
 	opts := []cascade.UploadOption{cascade.WithPublic(*public)}

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -67,7 +67,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 	// Determine if we should use TLS based on the endpoint
 	// Use TLS if: port is 443, or hostname doesn't start with "localhost"/"127.0.0.1"
 	useTLS := shouldUseTLS(cfg.GRPCAddr)
-	
+
 	var creds credentials.TransportCredentials
 	if useTLS {
 		// Use system TLS credentials for secure connections
@@ -76,7 +76,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		// Use insecure credentials for local development
 		creds = insecure.NewCredentials()
 	}
-	
+
 	// Create gRPC connection
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
@@ -86,7 +86,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		),
 	}
 
-	conn, err := grpc.DialContext(ctx, cfg.GRPCAddr, dialOpts...)
+	conn, err := grpc.NewClient(cfg.GRPCAddr, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
 	}
@@ -126,7 +126,7 @@ func shouldUseTLS(addr string) bool {
 	if strings.HasSuffix(addr, ":443") {
 		return true
 	}
-	
+
 	// Check if it's a local address (localhost, 127.0.0.1, or no hostname)
 	if strings.HasPrefix(addr, "localhost:") ||
 		strings.HasPrefix(addr, "127.0.0.1:") ||
@@ -134,7 +134,7 @@ func shouldUseTLS(addr string) bool {
 		strings.HasPrefix(addr, ":") { // Just port, implies localhost
 		return false
 	}
-	
+
 	// For any other remote address, prefer TLS by default for security
 	// This covers domain names without explicit port 443
 	if !strings.Contains(addr, "localhost") &&
@@ -142,7 +142,7 @@ func shouldUseTLS(addr string) bool {
 		!strings.Contains(addr, "0.0.0.0") {
 		return true
 	}
-	
+
 	return false
 }
 

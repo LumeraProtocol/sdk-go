@@ -7,7 +7,9 @@ import (
 // HashFile computes the Blake3 hash of a file
 func HashFile(data []byte) []byte {
 	hasher := blake3.New(32, nil)
-	hasher.Write(data)
+	_, err := hasher.Write(data)
+	if err != nil {
+		return nil
+	}
 	return hasher.Sum(nil)
 }
-
