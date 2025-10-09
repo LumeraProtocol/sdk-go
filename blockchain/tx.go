@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	signingtypes "github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Simulate runs a gas simulation for a provided tx bytes
@@ -156,4 +159,65 @@ func (c *Client) GetTx(ctx context.Context, hash string) (*txtypes.GetTxResponse
 		return nil, fmt.Errorf("empty get tx response")
 	}
 	return resp, nil
+}
+
+// WaitForTxInclusion polls GetTx until the transaction is included in a block.
+// It treats codes.NotFound as "not yet included" and continues polling every 1 second.
+// Returns the transaction response once it's confirmed with Height > 0.
+// Respects context cancellation/timeout.
+func (c *Client) WaitForTxInclusion(ctx context.Context, txHash string) (*txtypes.GetTxResponse, error) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			resp, err := c.GetTx(ctx, txHash)
+			if err != nil {
+				// Check if the error is NotFound - this means tx not yet included
+				if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+					continue // Keep polling
+				}
+				// Any other error should be returned
+				return nil, fmt.Errorf("get tx: %w", err)
+			}
+			// Validate we have a valid response with inclusion proof
+			if resp != nil && resp.TxResponse != nil && resp.TxResponse.Height > 0 {
+				return resp, nil
+			}
+		}
+	}
+}
+
+// ExtractEventAttribute extracts an attribute value from transaction events.
+// It searches through TxResponse.Events for the first event matching eventType,
+// then returns the value of the first attribute matching attrKey.
+// Returns an error if the transaction, events, or matching event/attribute are not found.
+func (c *Client) ExtractEventAttribute(tx *txtypes.GetTxResponse, eventType, attrKey string) (string, error) {
+	if tx == nil || tx.TxResponse == nil {
+		return "", fmt.Errorf("nil tx or tx response")
+	}
+	events := tx.TxResponse.GetEvents()
+	if len(events) == 0 {
+		return "", fmt.Errorf("no events in tx response")
+	}
+	for _, ev := range events {
+		if ev == nil {
+			continue
+		}
+		// Note: abci.Event uses GetType_() since 'type' is a reserved field name
+		if ev.GetType_() == eventType {
+			for _, attr := range ev.GetAttributes() {
+				if attr == nil {
+					continue
+				}
+				if attr.GetKey() == attrKey {
+					return attr.GetValue(), nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("attribute %q not found in event type %q", attrKey, eventType)
 }

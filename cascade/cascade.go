@@ -77,25 +77,15 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 	}
 
 	// Wait for the transaction to be included in a block
+	txResult, err := bc.WaitForTxInclusion(ctx, txHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait for tx inclusion: %w", err)
+	}
 
 	// Fetch Action ID from the transaction result
-	txResult, err := bc.GetTx(ctx, txHash)
+	actionID, err := bc.ExtractEventAttribute(txResult, "action_registered", "action_id")
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch tx result: %w", err)
-	}
-	if txResult == nil || txResult.TxResponse == nil || len(txResult.TxResponse.Logs) == 0 || len(txResult.TxResponse.Logs[0].Events) == 0 {
-		return nil, fmt.Errorf("invalid tx result")
-	}
-	var actionID string
-	for _, event := range txResult.TxResponse.Logs[0].Events {
-		if event.GetType_() == "action_registered" {
-			for _, attr := range event.GetAttributes() {
-				if attr.GetKey() == "action_id" {
-					actionID = attr.GetValue()
-					break
-				}
-			}
-		}
+		return nil, fmt.Errorf("failed to extract action_id: %w", err)
 	}
 	if actionID == "" {
 		return nil, fmt.Errorf("action_id not found in tx events")
@@ -161,7 +151,8 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 	}
 
 	return &types.DownloadResult{
-		ActionID: actionID,
-		TaskID:   task.TaskID,
+		ActionID:   actionID,
+		TaskID:     task.TaskID,
+		OutputPath: outputDir + "/" + actionID,
 	}, nil
 }

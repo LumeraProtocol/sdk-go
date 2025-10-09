@@ -38,6 +38,7 @@ examples/*/*.bin
 examples/*/*.txt
 
 build/
+output/
 
 docs/context.json
 docs/requirements.json
