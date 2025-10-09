@@ -35,7 +35,7 @@ func WithFileName(name string) UploadOption {
 }
 
 // Upload uploads a file using Cascade
-func (c *Client) Upload(ctx context.Context, bc *blockchain.Client, filePath string, opts ...UploadOption) (*types.CascadeResult, error) {
+func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Client, filePath string, opts ...UploadOption) (*types.CascadeResult, error) {
 	// Apply options
 	options := &UploadOptions{
 		Public: false,
@@ -57,7 +57,7 @@ func (c *Client) Upload(ctx context.Context, bc *blockchain.Client, filePath str
 
 	// Build RequestAction Message
 	msg := blockchain.NewMsgRequestAction(
-		"",
+		creator,
 		actiontypes.ActionTypeCascade,
 		string(metaBytes),
 		price,
@@ -76,20 +76,22 @@ func (c *Client) Upload(ctx context.Context, bc *blockchain.Client, filePath str
 		return nil, fmt.Errorf("failed to broadcast transaction: %w", err)
 	}
 
+	// Wait for the transaction to be included in a block
+
 	// Fetch Action ID from the transaction result
 	txResult, err := bc.GetTx(ctx, txHash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tx result: %w", err)
 	}
-	if txResult == nil || len(txResult.Logs) == 0 || len(txResult.Logs[0].Events) == 0 {
+	if txResult == nil || txResult.TxResponse == nil || len(txResult.TxResponse.Logs) == 0 || len(txResult.TxResponse.Logs[0].Events) == 0 {
 		return nil, fmt.Errorf("invalid tx result")
 	}
 	var actionID string
-	for _, event := range txResult.Logs[0].Events {
-		if event.Type == "action_requested" {
-			for _, attr := range event.Attributes {
-				if attr.Key == "action_id" {
-					actionID = attr.Value
+	for _, event := range txResult.TxResponse.Logs[0].Events {
+		if event.GetType_() == "action_registered" {
+			for _, attr := range event.GetAttributes() {
+				if attr.GetKey() == "action_id" {
+					actionID = attr.GetValue()
 					break
 				}
 			}

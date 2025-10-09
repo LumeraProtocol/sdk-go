@@ -1,10 +1,7 @@
 package blockchain
 
 import (
-	"encoding/json"
-
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 // NewMsgRequestAction constructs a MsgRequestAction with the provided parameters.

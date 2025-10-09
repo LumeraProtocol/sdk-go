@@ -58,7 +58,7 @@ func main() {
 	if fn := strings.TrimSpace(*upFileName); fn != "" {
 		opts = append(opts, cascade.WithFileName(fn))
 	}
-	result, err := client.Cascade.Upload(ctx, client.Blockchain, *filePath, opts...)
+	result, err := client.Cascade.Upload(ctx, *address, client.Blockchain, *filePath, opts...)
 	if err != nil {
 		log.Fatalf("Upload failed: %v", err)
 	}

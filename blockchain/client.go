@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -16,6 +18,22 @@ import (
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
 	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
 )
+
+var bech32Once sync.Once
+
+// ensureLumeraBech32Prefixes ensures Lumera bech32 prefixes are set globally
+func ensureLumeraBech32Prefixes() {
+	bech32Once.Do(func() {
+		cfg := sdk.GetConfig()
+		// Only set if not already sealed with the desired prefixes
+		if cfg.GetBech32AccountAddrPrefix() != "lumera" {
+			cfg.SetBech32PrefixForAccount("lumera", "lumerapub")
+			cfg.SetBech32PrefixForValidator("lumeravaloper", "lumeravaloperpub")
+			cfg.SetBech32PrefixForConsensusNode("lumeravalcons", "lumeravalconspub")
+			cfg.Seal()
+		}
+	})
+}
 
 // Config for blockchain client
 type Config struct {
@@ -43,6 +61,9 @@ type Client struct {
 
 // New creates a new blockchain client
 func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*Client, error) {
+	// Ensure Lumera bech32 prefixes are configured globally
+	ensureLumeraBech32Prefixes()
+
 	// Determine if we should use TLS based on the endpoint
 	// Use TLS if: port is 443, or hostname doesn't start with "localhost"/"127.0.0.1"
 	useTLS := shouldUseTLS(cfg.GRPCAddr)
