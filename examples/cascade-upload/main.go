@@ -63,7 +63,14 @@ func main() {
 		log.Fatalf("Upload failed: %v", err)
 	}
 
+	// Check status of the Action
+	action, err := client.Blockchain.Action.GetAction(ctx, result.ActionID)
+	if err != nil {
+		log.Fatalf("Failed to get action: %v", err)
+	}
+
 	fmt.Printf("Upload successful!\n")
 	fmt.Printf("Action ID: %s\n", result.ActionID)
 	fmt.Printf("Task ID: %s\n", result.TaskID)
+	fmt.Printf("Action Status: %s\n", action.State)
 }
