@@ -194,7 +194,7 @@ func (c *Client) WaitForTxInclusion(ctx context.Context, txHash string) (*txtype
 	}
 }
 
-// ExtractEventAttribute extracts an attribute value from transaction events.
+ // ExtractEventAttribute extracts an attribute value from transaction events.
 // It searches through TxResponse.Events for the first event matching eventType,
 // then returns the value of the first attribute matching attrKey.
 // Returns an error if the transaction, events, or matching event/attribute are not found.
@@ -224,3 +224,4 @@ func (c *Client) ExtractEventAttribute(tx *txtypes.GetTxResponse, eventType, att
 	}
 	return "", fmt.Errorf("attribute %q not found in event type %q", attrKey, eventType)
 }
+

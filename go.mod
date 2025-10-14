@@ -17,7 +17,7 @@ require (
 
 	// gRPC and networking
 	google.golang.org/grpc v1.76.0
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.10 // indirect
 
 	// Utilities
 	lukechampine.com/blake3 v1.4.1

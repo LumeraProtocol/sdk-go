@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	txv1beta1 "cosmossdk.io/api/cosmos/tx/v1beta1"
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
 	"github.com/LumeraProtocol/sdk-go/types"
@@ -45,7 +44,7 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 	}
 
 	// Register Action in blockchain
-	// Crearte metadata
+	// Create metadata
 	meta, price, expiration, err := c.snClient.BuildCascadeMetadataFromFile(ctx, filePath, options.Public)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build metadata: %w", err)
@@ -55,41 +54,12 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	// Build RequestAction Message
-	msg := blockchain.NewMsgRequestAction(
-		creator,
-		actiontypes.ActionTypeCascade,
-		string(metaBytes),
-		price,
-		expiration,
-	)
-
-	// Build Transaction
-	txBytes, err := bc.BuildAndSignTx(ctx, msg, options.FileName)
+	// Request Action transaction
+	ar, err := bc.RequestActionTx(ctx, creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration, options.FileName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build transaction: %w", err)
+		return nil, fmt.Errorf("request action tx: %w", err)
 	}
-
-	//Broadcast Transaction
-	txHash, err := bc.Broadcast(ctx, txBytes, txv1beta1.BroadcastMode_BROADCAST_MODE_SYNC)
-	if err != nil {
-		return nil, fmt.Errorf("failed to broadcast transaction: %w", err)
-	}
-
-	// Wait for the transaction to be included in a block
-	txResult, err := bc.WaitForTxInclusion(ctx, txHash)
-	if err != nil {
-		return nil, fmt.Errorf("failed to wait for tx inclusion: %w", err)
-	}
-
-	// Fetch Action ID from the transaction result
-	actionID, err := bc.ExtractEventAttribute(txResult, "action_registered", "action_id")
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract action_id: %w", err)
-	}
-	if actionID == "" {
-		return nil, fmt.Errorf("action_id not found in tx events")
-	}
+	actionID := ar.ActionID
 
 	// Upload file to SN for processing
 	// Create a file signature
