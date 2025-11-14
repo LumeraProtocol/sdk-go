@@ -26,6 +26,7 @@ func main() {
 	filePath := flag.String("file-path", "", "Path to file to upload (required)")
 	public := flag.Bool("public", true, "Whether upload is public")
 	upFileName := flag.String("file-name", "", "Optional filename override")
+	actionID := flag.String("action-id", "", "Existing action ID to upload bytes for (skips on-chain request)")
 	flag.Parse()
 
 	if strings.TrimSpace(*filePath) == "" {
@@ -53,6 +54,27 @@ func main() {
 		log.Fatalf("Failed to create client: %v", err)
 	}
 	defer client.Close() //nolint:errcheck
+
+	aid := strings.TrimSpace(*actionID)
+	if aid != "" {
+		fmt.Println("Uploading file bytes to SuperNodes for existing action...")
+		taskID, err := client.Cascade.UploadToSupernode(ctx, aid, *filePath)
+		if err != nil {
+			log.Fatalf("UploadToSupernode failed: %v", err)
+		}
+		fmt.Printf("Upload successful!\n")
+		fmt.Printf("Action ID: %s\n", aid)
+		fmt.Printf("Task ID: %s\n", taskID)
+
+		// Give the chain a moment, then check status
+		time.Sleep(5 * time.Second)
+		action, err := client.Blockchain.Action.GetAction(ctx, aid)
+		if err != nil {
+			log.Fatalf("Failed to get action: %v", err)
+		}
+		fmt.Printf("Action Status: %s\n", action.State)
+		return
+	}
 
 	fmt.Println("Uploading file...")
 	opts := []cascade.UploadOption{cascade.WithPublic(*public)}
