@@ -21,7 +21,6 @@ func main() {
 	keyringBackend := flag.String("keyring-backend", "os", "Keyring backend: os|file|test")
 	keyringDir := flag.String("keyring-dir", "~/.lumera", "Keyring base directory (actual dir appends keyring-<backend> for file/test)")
 	keyName := flag.String("key-name", "my-key", "Key name in the keyring")
-	address := flag.String("address", "lumera1abc...", "Your Lumera address")
 
 	filePath := flag.String("file-path", "", "Path to file to upload (required)")
 	public := flag.Bool("public", true, "Whether upload is public")
@@ -44,10 +43,15 @@ func main() {
 		log.Fatalf("Failed to create keyring: %v", err)
 	}
 
+	address, err := sdkcrypto.AddressFromKey(kr, *keyName, "lumera")
+	if err != nil {
+		log.Fatalf("derive owner address: %v\n", err)
+	}
+
 	client, err := lumerasdk.New(ctx, lumerasdk.Config{
 		ChainID:  *chainID,
 		GRPCAddr: *grpcEndpoint,
-		Address:  *address,
+		Address:  address,
 		KeyName:  *keyName,
 	}, kr)
 	if err != nil {
@@ -81,7 +85,7 @@ func main() {
 	if fn := strings.TrimSpace(*upFileName); fn != "" {
 		opts = append(opts, cascade.WithFileName(fn))
 	}
-	result, err := client.Cascade.Upload(ctx, *address, client.Blockchain, *filePath, opts...)
+	result, err := client.Cascade.Upload(ctx, address, client.Blockchain, *filePath, opts...)
 	if err != nil {
 		log.Fatalf("Upload failed: %v", err)
 	}

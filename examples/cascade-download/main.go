@@ -19,7 +19,6 @@ func main() {
 	keyringBackend := flag.String("keyring-backend", "os", "Keyring backend: os|file|test")
 	keyringDir := flag.String("keyring-dir", "~/.lumera", "Keyring base directory (actual dir appends keyring-<backend> for file/test)")
 	keyName := flag.String("key-name", "my-key", "Key name in the keyring")
-	address := flag.String("address", "lumera1abc...", "Your Lumera address")
 
 	actionID := flag.String("action-id", "", "Action ID to download (required)")
 	outputDir := flag.String("output-dir", "./output", "Output directory for download")
@@ -48,10 +47,15 @@ func main() {
 		log.Fatalf("Key %s not found in keyring", *keyName)
 	}
 
+	address, err := sdkcrypto.AddressFromKey(kr, *keyName, "lumera")
+	if err != nil {
+		log.Fatalf("derive owner address: %v\n", err)
+	}
+
 	client, err := lumerasdk.New(ctx, lumerasdk.Config{
 		ChainID:  *chainID,
 		GRPCAddr: *grpcEndpoint,
-		Address:  *address,
+		Address:  address,
 		KeyName:  *keyName,
 	}, kr)
 	if err != nil {

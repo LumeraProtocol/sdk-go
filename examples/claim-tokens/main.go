@@ -18,7 +18,6 @@ func main() {
 	keyringBackend := flag.String("keyring-backend", "os", "Keyring backend: os|file|test")
 	keyringDir := flag.String("keyring-dir", "~/.lumera", "Keyring base directory (actual dir appends keyring-<backend> for file/test)")
 	keyName := flag.String("key-name", "my-key", "Key name in the keyring")
-	address := flag.String("address", "lumera1abc...", "Your Lumera address")
 	flag.Parse()
 
 	params := sdkcrypto.KeyringParams{
@@ -32,10 +31,15 @@ func main() {
 		log.Fatalf("Failed to create keyring: %v", err)
 	}
 
+	address, err := sdkcrypto.AddressFromKey(kr, *keyName, "lumera")
+	if err != nil {
+		log.Fatalf("derive owner address: %v\n", err)
+	}
+
 	client, err := lumerasdk.New(ctx, lumerasdk.Config{
 		ChainID:  *chainID,
 		GRPCAddr: *grpcEndpoint,
-		Address:  *address,
+		Address:  address,
 		KeyName:  *keyName,
 	}, kr)
 	if err != nil {
