@@ -55,7 +55,7 @@ func main() {
         GRPCAddr: "localhost:9090",
         Address:  "lumera1abc...",
         KeyName:  "my-key",
-    }, kr)
+    }, kr, lumerasdk.WithLogger(log.Default()))
     if err != nil {
         log.Fatal(err)
     }
@@ -75,6 +75,30 @@ Note: For Cascade file operations (SuperNode SDK + SnApi), see:
 - [examples/cascade-upload](examples/cascade-upload)
 - [examples/cascade-download](examples/cascade-download)
 
+### Multi-Account Usage
+
+Reuse the same configuration and transports for multiple local accounts via the client factory:
+
+```go
+kr, _ := keyring.New("lumera", "os", "~/.lumera", nil)
+factory, err := lumerasdk.NewFactory(lumerasdk.Config{
+    ChainID:      "lumera-testnet-2",
+    GRPCEndpoint: "localhost:9090",
+    RPCEndpoint:  "http://localhost:26657",
+}, kr)
+
+alice, _ := factory.WithSigner(ctx, "lumera1alice...", "alice")
+bob, _ := factory.WithSigner(ctx, "lumera1bob...", "bob")
+defer alice.Close()
+defer bob.Close()
+
+// Upload or query with different signers using the same underlying connections
+_ = alice.Cascade.Upload(ctx, "lumera1alice...", alice.Blockchain, "/tmp/fileA")
+_ = bob.Cascade.Upload(ctx, "lumera1bob...", bob.Blockchain, "/tmp/fileB")
+```
+
+See [examples/multi-account](examples/multi-account) for a runnable sample.
+
 ## Examples
 
 See the [examples](./examples) directory for complete working examples:
@@ -83,6 +107,7 @@ See the [examples](./examples) directory for complete working examples:
 - [Cascade Download](./examples/cascade-download) - Download files from storage
 - [Query Actions](./examples/query-actions) - Query blockchain actions
 - [Claim Tokens](./examples/claim-tokens) - Claim tokens from old chain
+- [Multi-Account Factory](./examples/multi-account) - Reuse a config while swapping local signers
 
 ## Documentation
 

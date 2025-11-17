@@ -1,6 +1,10 @@
 package client
 
-import "time"
+import (
+	"time"
+
+	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
+)
 
 // Option is a function that modifies Config
 type Option func(*Config)
@@ -15,7 +19,14 @@ func WithChainID(chainID string) Option {
 // WithGRPCAddr sets the gRPC address
 func WithGRPCAddr(addr string) Option {
 	return func(c *Config) {
-		c.GRPCAddr = addr
+		c.GRPCEndpoint = addr
+	}
+}
+
+// WithRPCAddr sets the Tendermint RPC endpoint.
+func WithRPCAddr(addr string) Option {
+	return func(c *Config) {
+		c.RPCEndpoint = addr
 	}
 }
 
@@ -48,3 +59,9 @@ func WithMaxMessageSize(size int) Option {
 	}
 }
 
+// WithLogger enables diagnostic logging using the provided logger.
+func WithLogger(logger sdklog.Logger) Option {
+	return func(c *Config) {
+		c.Logger = logger
+	}
+}

@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
-	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	signingtypes "github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
+	waittx "github.com/LumeraProtocol/sdk-go/internal/wait-tx"
 )
 
 // Simulate runs a gas simulation for a provided tx bytes
@@ -164,37 +163,31 @@ func (c *Client) GetTx(ctx context.Context, hash string) (*txtypes.GetTxResponse
 	return resp, nil
 }
 
-// WaitForTxInclusion polls GetTx until the transaction is included in a block.
-// It treats codes.NotFound as "not yet included" and continues polling every 1 second.
-// Returns the transaction response once it's confirmed with Height > 0.
-// Respects context cancellation/timeout.
+// WaitForTxInclusion waits for a transaction to reach a final state using a
+// websocket subscriber when possible and falling back to periodic gRPC polling.
+// It respects the provided context for cancellation or deadlines.
 func (c *Client) WaitForTxInclusion(ctx context.Context, txHash string) (*txtypes.GetTxResponse, error) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-ticker.C:
-			resp, err := c.GetTx(ctx, txHash)
-			if err != nil {
-				// Check if the error is NotFound - this means tx not yet included
-				if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
-					continue // Keep polling
-				}
-				// Any other error should be returned
-				return nil, fmt.Errorf("get tx: %w", err)
-			}
-			// Validate we have a valid response with inclusion proof
-			if resp != nil && resp.TxResponse != nil && resp.TxResponse.Height > 0 {
-				return resp, nil
-			}
-		}
+	w, err := waittx.New(c.config.WaitTx, c.config.RPCEndpoint, txQuerierFunc(func(ctx context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
+		return c.GetTx(ctx, req.GetHash())
+	}))
+	if err != nil {
+		return nil, err
 	}
+
+	if _, err := w.Wait(ctx, txHash, 0); err != nil {
+		return nil, err
+	}
+
+	return c.GetTx(ctx, txHash)
 }
 
- // ExtractEventAttribute extracts an attribute value from transaction events.
+type txQuerierFunc func(ctx context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error)
+
+func (f txQuerierFunc) GetTx(ctx context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
+	return f(ctx, req)
+}
+
+// ExtractEventAttribute extracts an attribute value from transaction events.
 // It searches through TxResponse.Events for the first event matching eventType,
 // then returns the value of the first attribute matching attrKey.
 // Returns an error if the transaction, events, or matching event/attribute are not found.
@@ -224,4 +217,3 @@ func (c *Client) ExtractEventAttribute(tx *txtypes.GetTxResponse, eventType, att
 	}
 	return "", fmt.Errorf("attribute %q not found in event type %q", attrKey, eventType)
 }
-

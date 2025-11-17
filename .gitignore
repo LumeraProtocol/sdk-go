@@ -42,3 +42,4 @@ output/
 
 docs/context.json
 docs/requirements.json
+tmp_*.txt

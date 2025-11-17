@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
+	sdkEvent "github.com/LumeraProtocol/sdk-go/cascade/event"
 	"github.com/LumeraProtocol/sdk-go/types"
 )
 
@@ -55,11 +57,36 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 	}
 
 	// Request Action transaction
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKActionRegistrationRequested,
+		TaskType:  "CASCADE",
+		Timestamp: time.Now(),
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyEventType:  actiontypes.ActionTypeCascade.String(),
+			sdkEvent.KeyMessage:    options.FileName,
+			sdkEvent.KeyPrice:      price,
+			sdkEvent.KeyExpiration: expiration,
+			sdkEvent.KeyFilePath:   filePath,
+		},
+	})
 	ar, err := bc.RequestActionTx(ctx, creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration, options.FileName)
 	if err != nil {
+		c.logf("request action tx failed: creator=%s file=%s err=%v", creator, filePath, err)
 		return nil, fmt.Errorf("request action tx: %w", err)
 	}
 	actionID := ar.ActionID
+	regHeight := ar.Height
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKActionRegistrationConfirmed,
+		ActionID:  actionID,
+		TaskType:  "CASCADE",
+		Timestamp: time.Now(),
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyActionID:    actionID,
+			sdkEvent.KeyTxHash:      ar.TxHash,
+			sdkEvent.KeyBlockHeight: regHeight,
+		},
+	})
 
 	// Upload file to SN for processing
 	// Create a file signature
@@ -73,6 +100,17 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 	if err != nil {
 		return nil, fmt.Errorf("failed to start cascade: %w", err)
 	}
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKCascadeTaskStarted,
+		ActionID:  actionID,
+		TaskType:  "CASCADE",
+		Timestamp: time.Now(),
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyTaskID:   taskID,
+			sdkEvent.KeyActionID: actionID,
+			sdkEvent.KeyFilePath: filePath,
+		},
+	})
 
 	// Wait for task completion
 	task, err := c.tasks.Wait(ctx, taskID)
@@ -81,7 +119,11 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 	}
 
 	return &types.CascadeResult{
-		ActionID: actionID,
+		ActionResult: types.ActionResult{
+			ActionID: actionID,
+			TxHash:   ar.TxHash,
+			Height:   regHeight,
+		},
 		TaskID:   task.TaskID,
 	}, nil
 }
@@ -125,4 +167,16 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 		TaskID:     task.TaskID,
 		OutputPath: outputDir + "/" + actionID,
 	}, nil
+}
+
+func (c *Client) logf(format string, args ...interface{}) {
+	if c.logger != nil {
+		c.logger.Printf(format, args...)
+	}
+}
+
+func (c *Client) emitClientEvent(ctx context.Context, evt sdkEvent.Event) {
+	if c.isLocalEventType(evt.Type) {
+		c.emitLocalEvent(ctx, evt)
+	}
 }

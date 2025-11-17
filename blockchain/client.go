@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
+	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	//audittypes "github.com/LumeraProtocol/lumera/x/audit/types"
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
@@ -39,9 +40,11 @@ func ensureLumeraBech32Prefixes() {
 type Config struct {
 	ChainID        string
 	GRPCAddr       string
+	RPCEndpoint    string
 	Timeout        time.Duration
 	MaxRecvMsgSize int
 	MaxSendMsgSize int
+	WaitTx         clientconfig.WaitTxConfig
 }
 
 // Client provides access to blockchain operations
@@ -85,6 +88,8 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 			grpc.MaxCallSendMsgSize(cfg.MaxSendMsgSize),
 		),
 	}
+
+	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
 
 	conn, err := grpc.NewClient(cfg.GRPCAddr, dialOpts...)
 	if err != nil {
