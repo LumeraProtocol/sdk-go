@@ -30,6 +30,8 @@ require (
 	lukechampine.com/blake3 v1.4.1
 )
 
+require github.com/cosmos/ibc-go/v10 v10.3.0
+
 require (
 	cosmossdk.io/collections v1.3.0 // indirect
 	cosmossdk.io/core v0.11.3 // indirect
