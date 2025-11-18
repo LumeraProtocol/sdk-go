@@ -58,7 +58,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("chain_id is required")
 	}
 	if c.GRPCEndpoint == "" {
-		return fmt.Errorf("grpc_addr is required")
+		return fmt.Errorf("grpc_endpoint is required")
 	}
 	if c.RPCEndpoint == "" {
 		return fmt.Errorf("rpc_endpoint is required")
