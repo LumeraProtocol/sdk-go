@@ -1,29 +1,37 @@
 # Lumera SDK Agent Guide
-- **Purpose**: Unified Go client for Lumera blockchain (`blockchain/`) and Cascade storage (`cascade/`) surfaced via `client.Client` (`client/client.go`).
-- **Client wiring**: `client.New` composes module clients, applies `client.Options`, and validates `client.Config`; extend config knobs there so both subsystems stay in sync.
-- **Config defaults**: `client/config.go` backfills timeouts, gRPC message sizes (50 MB), retry counts, and `WaitTx` polling; rely on `DefaultConfig()` during examples/tests to avoid nil durations.
-- **TLS heuristic**: `blockchain/client.go` auto-selects TLS for non-local gRPC endpoints; honor `shouldUseTLS` when adding new dial options instead of hard-coding credentials.
-- **WaitTx flow**: `blockchain.Client.WaitForTxInclusion` delegates to `internal/wait-tx` which prefers CometBFT websocket subscriptions (`RPCEndpoint`) with gRPC polling fallback; supply the RPC endpoint in config when you need low-latency confirmations.
-- **Transaction helper**: Always route new Cosmos SDK messages through `blockchain.Client.BuildAndSignTx`; it resolves account data, inserts placeholder signatures for simulation, then signs with `internal/crypto.SignTxWithKeyring`.
-- **Gas + fees**: `blockchain/tx.go` simulates gas and applies a 30% safety buffer with minimum fee `ulume` at 0.025 gas price; reuse that flow instead of manual fee math.
-- **Broadcast pattern**: Use `Client.Broadcast` with `txtypes.BroadcastMode_BROADCAST_MODE_SYNC` plus `WaitForTxInclusion`; direct async broadcasts skip the event/attribute extraction helpers.
-- **Action queries**: Prefer `blockchain.WithActionType(Str|Enum)` and `WithPagination` (`blockchain/query.go`) when listing; these utilities normalize enum casing and encode `query.PageRequest`.
-- **Action metadata**: `types.ActionFromProto` decodes cascade/sense metadata into rich structs; avoid re-parsing protobuf blobs in callers.
-- **Supernode queries**: `blockchain/supernode.go` converts proto responses via `types.SuperNodeFromProto`, choosing the highest-height IP/state; follow that pattern when exposing new fields.
-- **Cascade upload**: `cascade/cascade.go` builds metadata via SuperNode SDK, registers an action on-chain, then starts the storage task; keep blockchain `Client` available to reuse transaction helpers.
-- **Cascade download**: Downloads require signatures from the same SuperNode SDK client and rely on the shared keyring address (`cascade.Client.Download`).
-- **Tasks + polling**: `cascade.TaskManager` polls `snsdk.Client.GetTask` every second until `COMPLETED`/`FAILED`; reuse or extend this manager for new Cascade task types instead of ad-hoc loops.
-- **SuperNode SDK config**: `cascade/client.go` builds `snconfig.NewConfig` from chain + keyring info; any new Cascade entry point must populate `AccountConfig` consistently (same key name and keyring).
-- **Keyring helpers**: `internal/crypto.NewKeyring` and `GetKey` wrap Cosmos keyring setup; reference these in CLIs/examples instead of duplicating backend selection logic.
-- **Bech32 init**: `ensureLumeraBech32Prefixes` in `blockchain/client.go` seals the global config; avoid calling SDK prefix setters elsewhere to prevent panics after sealing.
-- **Message constructors**: Reuse `NewMsgRequestAction`, `NewMsgRegisterSupernode`, etc., in `blockchain` package to centralize proto wiring and string conversions.
-- **Adding new modules**: Extend `blockchain.Client` by storing the typed query client and exposing convenience methods; remember to thread `keyring`/`keyName` if the module needs signed txs.
-- **Testing**: `make test` runs `go test -race -coverprofile=coverage.out ./...`; expect coverage artefacts (`coverage.html`) when tests pass.
-- **Lint/build**: `make lint` depends on `golangci-lint`; `make examples` builds all example binaries into `./build/` using the package names.
-- **Go toolchain**: Module targets Go 1.25.1; use new stdlib APIs (e.g., `grpc.NewClient`) and verify replacements in `go.mod` before tagging releases.
-- **Examples**: Working entry points live in `examples/*`; mirror their flag handling and keyring bootstrap when authoring new samples or integration tests.
-- **Error handling**: The SDK wraps lower-level errors (`fmt.Errorf("context: %w", err)`); maintain that pattern so callers can unwrap Cosmos and SuperNode failures.
-- **Context usage**: Every public method accepts `context.Context`; propagate deadlines/timeouts rather than creating backgrounds within new code.
-- **gRPC sizing**: Respect `MaxRecvMsgSize`/`MaxSendMsgSize` from config when adding new connections; defaults assume large Cascade payloads.
-- **External deps**: Blockchain APIs come from `github.com/LumeraProtocol/lumera` protos, storage flows from `github.com/LumeraProtocol/supernode/v2`; pin versions in `go.mod` before introducing new module imports.
-- **Docs cross-check**: Surface-breaking changes should update `README.md` quick-start snippets so they match `client.Config` requirements.
+
+## Architecture & Config
+- `client.Client` (`client/client.go`) fans out to both `blockchain.Client` and `cascade.Client`; add new modules by extending `client.New` so options/config stay in lockstep.
+- `client/config.go` hydrates timeouts, 50 MB gRPC limits, retry counts, and `WaitTx` knobs; use `DefaultConfig()` in samples/tests to avoid zero durations.
+- `blockchain/client.go` enforces `ensureLumeraBech32Prefixes` and selects TLS using `shouldUseTLS`; follow this heuristic instead of forcing creds per call.
+- `cascade/client.go` wraps the SuperNode SDK via `snconfig.NewConfig`; new Cascade entry points must reuse the same keyring/key name to share signatures.
+
+## Transactions & Waiting
+- `blockchain/tx.go` centralizes the tx lifecycle: build with `NewDefaultTxConfig`, resolve account/sequence, simulate gas (adds 30 % buffer), set min `ulume` fees (0.025 gas price), sign with `internal/crypto.SignTxWithKeyring`.
+- Always broadcast through `Client.Broadcast` + `WaitForTxInclusion`; the waiter (`internal/wait-tx`) prefers CometBFT websockets via `WaitTxConfig.RPCEndpoint` and falls back to gRPC polling.
+- `blockchain.Client.ExtractEventAttribute` is how examples retrieve IDs; keep event parsing there so higher layers stay clean.
+
+## Queries & Module Patterns
+- `blockchain/action.go` + `blockchain/query.go` expose `WithActionType(Str|Enum)` and `WithPagination` helpers; they normalize enum casing and wire `query.PageRequest`.
+- `types.ActionFromProto` decodes Cascade/Sense metadata to typed structs; never re-unmarshal metadata blobs outside `types`.
+- `blockchain/supernode.go` converts proto responses with `types.SuperNodeFromProto` which picks the highest-height IP/state—mirror this when surfacing new fields.
+- Message constructors (e.g., `NewMsgRequestAction`, `NewMsgRegisterSupernode`) live alongside their modules; reuse them so string/enum handling stays consistent.
+
+## Cascade Flows
+- `cascade/cascade.go` uploads: build metadata via SuperNode SDK, call `blockchain.Client.RequestActionTx`, then start storage with `snClient.StartCascade`; downloads reuse the same client/key for signatures.
+- `cascade.TaskManager` polls `snsdk.Client.GetTask` every second until `COMPLETED`/`FAILED`; extend this manager for new task types instead of bespoke loops.
+
+## Keyring & Examples
+- `internal/crypto.NewKeyring`, `GetKey`, and `NewDefaultTxConfig` wrap Cosmos keyring and proto registration; all examples (`examples/*`) show the expected bootstrapping/flag pattern.
+- `ensureLumeraBech32Prefixes` seals global Bech32 config once; avoid calling Cosmos prefix setters elsewhere to prevent panics.
+
+## Developer Workflows
+- `make sdk` (same as `make build`) compiles all packages; `make examples` or `make example-<name>` drops binaries into `build/`.
+- `make test` runs `go test -race -coverprofile=coverage.out ./...` and emits `coverage.html`; `make lint` requires `golangci-lint`.
+- Stick to Go 1.25.1 (per `go.mod`) and respect the `replace` pins for CometBFT/Cosmos; update both blockchain + SuperNode deps together when bumping versions.
+
+## Conventions
+- Errors wrap context with `fmt.Errorf("context: %w", err)` so callers can unwrap lower layers.
+- All public methods accept `context.Context`; propagate caller deadlines rather than creating `context.Background()` internally.
+- Honor `MaxRecvMsgSize`/`MaxSendMsgSize` from config when introducing new gRPC connections; large Cascade payloads depend on these defaults.
+- Update `README.md` examples whenever `client.Config` signatures change so onboarding stays accurate.

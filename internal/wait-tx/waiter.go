@@ -50,6 +50,7 @@ func (w *Waiter) Wait(ctx context.Context, txHash string, timeout time.Duration)
 
 	if w.subscriber != nil {
 		subCtx, cancel := context.WithTimeout(ctx, w.setupDelay)
+		defer cancel()
 		resCh := make(chan Result, 1)
 		errCh := make(chan error, 1)
 		go func() {

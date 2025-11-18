@@ -124,7 +124,7 @@ func ApplyWaitTxDefaults(cfg *WaitTxConfig) {
 		return
 	}
 	def := DefaultWaitTxConfig()
-	
+
 	if cfg.SubscriberSetupTimeout <= 0 {
 		cfg.SubscriberSetupTimeout = def.SubscriberSetupTimeout
 	}

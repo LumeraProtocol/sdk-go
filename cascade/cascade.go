@@ -85,7 +85,7 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 	})
 
 	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, memo)
-    if err != nil {
+	if err != nil {
 		return nil, err
 	}
 

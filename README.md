@@ -51,10 +51,11 @@ func main() {
     
     // Create client
     client, err := lumerasdk.New(ctx, lumerasdk.Config{
-        ChainID:  "lumera-testnet-2",
-        GRPCAddr: "localhost:9090",
-        Address:  "lumera1abc...",
-        KeyName:  "my-key",
+        ChainID:      "lumera-testnet-2",
+        GRPCEndpoint: "localhost:9090",
+        RPCEndpoint:  "http://localhost:26657",
+        Address:      "lumera1abc...",
+        KeyName:      "my-key",
     }, kr, lumerasdk.WithLogger(log.Default()))
     if err != nil {
         log.Fatal(err)
@@ -80,6 +81,14 @@ Note: For Cascade file operations (SuperNode SDK + SnApi), see:
 Reuse the same configuration and transports for multiple local accounts via the client factory:
 
 ```go
+import (
+    "context"
+
+    "github.com/cosmos/cosmos-sdk/crypto/keyring"
+    lumerasdk "github.com/LumeraProtocol/sdk-go/client"
+    sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
+)
+
 kr, _ := keyring.New("lumera", "os", "~/.lumera", nil)
 factory, err := lumerasdk.NewFactory(lumerasdk.Config{
     ChainID:      "lumera-testnet-2",
@@ -87,14 +96,17 @@ factory, err := lumerasdk.NewFactory(lumerasdk.Config{
     RPCEndpoint:  "http://localhost:26657",
 }, kr)
 
-alice, _ := factory.WithSigner(ctx, "lumera1alice...", "alice")
-bob, _ := factory.WithSigner(ctx, "lumera1bob...", "bob")
+aliceAddr, _ := sdkcrypto.AddressFromKey(kr, "alice", "lumera")
+bobAddr, _ := sdkcrypto.AddressFromKey(kr, "bob", "lumera")
+
+alice, _ := factory.WithSigner(ctx, aliceAddr, "alice")
+bob, _ := factory.WithSigner(ctx, bobAddr, "bob")
 defer alice.Close()
 defer bob.Close()
 
 // Upload or query with different signers using the same underlying connections
-_ = alice.Cascade.Upload(ctx, "lumera1alice...", alice.Blockchain, "/tmp/fileA")
-_ = bob.Cascade.Upload(ctx, "lumera1bob...", bob.Blockchain, "/tmp/fileB")
+_, _ = alice.Blockchain.Action.GetAction(ctx, "some-action-id")
+_, _ = bob.Blockchain.Action.GetAction(ctx, "another-action-id")
 ```
 
 See [examples/multi-account](examples/multi-account) for a runnable sample.

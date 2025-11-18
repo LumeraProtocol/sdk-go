@@ -18,6 +18,10 @@ func main() {
 	chainID := flag.String("chain-id", "lumera-testnet-2", "Chain ID")
 	keyringBackend := flag.String("keyring-backend", "os", "Keyring backend: os|file|test")
 	keyringDir := flag.String("keyring-dir", "~/.lumera", "Keyring base directory")
+	keyName1 := flag.String("key-name-1", "bob", "Key name for account1")
+	keyName2 := flag.String("key-name-2", "alice", "Key name for account2")
+	actionID1 := flag.String("action-id-1", "", "Optional action ID to fetch with account1")
+	actionID2 := flag.String("action-id-2", "", "Optional action ID to fetch with account2")
 	flag.Parse()
 
 	params := sdkcrypto.KeyringParams{
@@ -40,23 +44,45 @@ func main() {
 		log.Fatalf("Failed to create client factory: %v", err)
 	}
 
-	alice, err := factory.WithSigner(ctx, "lumera1alice...", "alice")
+	account1Addr, err := sdkcrypto.AddressFromKey(kr, *keyName1, "lumera")
 	if err != nil {
-		log.Fatalf("Failed to create Alice client: %v", err)
+		log.Fatalf("Failed to derive account1 address (%s): %v", *keyName1, err)
 	}
-	defer alice.Close() //nolint:errcheck
-
-	bob, err := factory.WithSigner(ctx, "lumera1bob...", "bob")
+	account2Addr, err := sdkcrypto.AddressFromKey(kr, *keyName2, "lumera")
 	if err != nil {
-		log.Fatalf("Failed to create Bob client: %v", err)
+		log.Fatalf("Failed to derive account2 address (%s): %v", *keyName2, err)
 	}
-	defer bob.Close() //nolint:errcheck
 
-	fmt.Println("Querying sample actions for Alice and Bob...")
-	if _, err := alice.Blockchain.Action.GetAction(ctx, "action-alice"); err != nil {
-		fmt.Printf("Alice query error: %v\n", err)
+	account1, err := factory.WithSigner(ctx, account1Addr, *keyName1)
+	if err != nil {
+		log.Fatalf("Failed to create account1 client: %v", err)
 	}
-	if _, err := bob.Blockchain.Action.GetAction(ctx, "action-bob"); err != nil {
-		fmt.Printf("Bob query error: %v\n", err)
+	defer account1.Close() //nolint:errcheck
+
+	account2, err := factory.WithSigner(ctx, account2Addr, *keyName2)
+	if err != nil {
+		log.Fatalf("Failed to create account2 client: %v", err)
+	}
+	defer account2.Close() //nolint:errcheck
+
+	fmt.Println("Querying sample actions for account1 and account2...")
+	if id := *actionID1; id != "" {
+		if _, err := account1.Blockchain.Action.GetAction(ctx, id); err != nil {
+			fmt.Printf("account1 failed to fetch action %q (expected if it doesn't exist yet): %v\n", id, err)
+		} else {
+			fmt.Printf("account1 successfully fetched action %q\n", id)
+		}
+	} else {
+		fmt.Println("account1 action ID not provided; skipping query.")
+	}
+
+	if id := *actionID2; id != "" {
+		if _, err := account2.Blockchain.Action.GetAction(ctx, id); err != nil {
+			fmt.Printf("account2 failed to fetch action %q (expected if it doesn't exist yet): %v\n", id, err)
+		} else {
+			fmt.Printf("account2 successfully fetched action %q\n", id)
+		}
+	} else {
+		fmt.Println("account2 action ID not provided; skipping query.")
 	}
 }

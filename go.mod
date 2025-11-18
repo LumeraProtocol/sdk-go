@@ -4,8 +4,12 @@ go 1.25.1
 
 // Pin compatible versions to prevent go mod tidy from updating
 replace (
-	github.com/cometbft/cometbft => github.com/cometbft/cometbft v0.38.12
 	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.14
+
+// Local development - uncomment these for local testing
+// Comment these lines before releasing
+// 	github.com/LumeraProtocol/lumera => ../lumera
+//  github.com/LumeraProtocol/supernode/v2 => ../supernode
 )
 
 require (
@@ -30,8 +34,6 @@ require (
 	lukechampine.com/blake3 v1.4.1
 )
 
-require github.com/cosmos/ibc-go/v10 v10.3.0
-
 require (
 	cosmossdk.io/collections v1.3.0 // indirect
 	cosmossdk.io/core v0.11.3 // indirect
@@ -52,7 +54,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/speakeasy v0.2.0 // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.14.1 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
@@ -191,8 +192,3 @@ require (
 	pgregory.net/rapid v1.2.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
-
-// Local development - uncomment these for local testing
-// Remove these lines before releasing
-// 	github.com/LumeraProtocol/lumera => ../lumera
-//replace github.com/LumeraProtocol/supernode/v2 => ../supernode

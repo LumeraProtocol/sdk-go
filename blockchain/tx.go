@@ -165,7 +165,11 @@ func (c *Client) GetTx(ctx context.Context, hash string) (*txtypes.GetTxResponse
 
 // WaitForTxInclusion waits for a transaction to reach a final state using a
 // websocket subscriber when possible and falling back to periodic gRPC polling.
-// It respects the provided context for cancellation or deadlines.
+// A new waiter (and therefore a new websocket subscription) is created for each
+// invocation, so sequential callers should expect a new Tendermint RPC client
+// per call. Timeouts are driven entirely by the caller-provided context (the
+// waiter timeout argument remains zero intentionally). It respects the context
+// for cancellation or deadlines.
 func (c *Client) WaitForTxInclusion(ctx context.Context, txHash string) (*txtypes.GetTxResponse, error) {
 	w, err := waittx.New(c.config.WaitTx, c.config.RPCEndpoint, txQuerierFunc(func(ctx context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
 		return c.GetTx(ctx, req.GetHash())
