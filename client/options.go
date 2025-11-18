@@ -31,7 +31,7 @@ func WithGRPCEndpoint(endpoint string) Option {
 	}
 }
 
-// WithRPCEndpoint sets the Tendermint RPC endpoint.
+// WithRPCEndpoint sets the CometBFT RPC endpoint.
 func WithRPCEndpoint(endpoint string) Option {
 	return func(c *Config) {
 		c.RPCEndpoint = endpoint

@@ -74,13 +74,13 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 	}
 
 	// Request Action transaction
-	actionType := msg.GetActionType()
+	taskType := normalizeTaskType(msg.GetActionType())
 	c.emitClientEvent(ctx, sdkEvent.Event{
 		Type:      sdkEvent.SDKActionRegistrationRequested,
-		TaskType:  actionType,
+		TaskType:  taskType,
 		Timestamp: time.Now(),
 		Data: sdkEvent.EventData{
-			sdkEvent.KeyEventType:  actionType,
+			sdkEvent.KeyEventType:  taskType,
 			sdkEvent.KeyPrice:      msg.Price,
 			sdkEvent.KeyExpiration: msg.ExpirationTime,
 		},
@@ -96,7 +96,7 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 	c.emitClientEvent(ctx, sdkEvent.Event{
 		Type:      sdkEvent.SDKActionRegistrationConfirmed,
 		ActionID:  actionID,
-		TaskType:  actionType,
+		TaskType:  taskType,
 		Timestamp: time.Now(),
 		Data: sdkEvent.EventData{
 			sdkEvent.KeyActionID:    actionID,
@@ -243,4 +243,19 @@ func (c *Client) logf(format string, args ...interface{}) {
 		return
 	}
 	sdklog.Infof(c.logger, format, args...)
+}
+
+func normalizeTaskType(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if val, ok := actiontypes.ActionType_value[raw]; ok {
+		switch actiontypes.ActionType(val) {
+		case actiontypes.ActionTypeCascade:
+			return string(types.ActionTypeCascade)
+		case actiontypes.ActionTypeSense:
+			return string(types.ActionTypeSense)
+		}
+	}
+	return raw
 }

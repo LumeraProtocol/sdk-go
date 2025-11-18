@@ -12,7 +12,7 @@ type Config struct {
 	// Blockchain connection
 	ChainID      string
 	GRPCEndpoint string // Lumera blockchain gRPC endpoint
-	RPCEndpoint  string // Tendermint RPC endpoint for websocket subscriptions
+	RPCEndpoint  string // Lumera RPC endpoint for websocket subscriptions
 
 	// Account settings
 	Address string // Your cosmos address (lumera1...)
@@ -36,7 +36,8 @@ type Config struct {
 
 // WaitTxConfig configures how the SDK waits for transaction inclusion.
 type WaitTxConfig struct {
-	// SubscriberSetupTimeout defines how long we wait for the websocket subscription to become ready.
+	// SubscriberSetupTimeout defines how long we wait for the websocket subscription to become
+	// ready during the initial setup phase.
 	SubscriberSetupTimeout time.Duration
 
 	// Polling is a fallback mechanism when a websocket subscription is not available.

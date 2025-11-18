@@ -166,7 +166,7 @@ func (c *Client) GetTx(ctx context.Context, hash string) (*txtypes.GetTxResponse
 // WaitForTxInclusion waits for a transaction to reach a final state using a
 // websocket subscriber when possible and falling back to periodic gRPC polling.
 // A new waiter (and therefore a new websocket subscription) is created for each
-// invocation, so sequential callers should expect a new Tendermint RPC client
+// invocation, so sequential callers should expect a new CometBFT RPC client
 // per call. Timeouts are driven entirely by the caller-provided context (the
 // waiter timeout argument remains zero intentionally). It respects the context
 // for cancellation or deadlines.
