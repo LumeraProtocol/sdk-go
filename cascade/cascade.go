@@ -35,96 +35,151 @@ func WithFileName(name string) UploadOption {
 	}
 }
 
-// Upload uploads a file using Cascade
-func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Client, filePath string, opts ...UploadOption) (*types.CascadeResult, error) {
+// CreateRequestActionMessage builds Cascade metadata and constructs a MsgRequestAction without broadcasting it.
+// Returns the built Cosmos message and the serialized metadata bytes used in the message.
+func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string, filePath string, opts ...UploadOption) (*actiontypes.MsgRequestAction, []byte, error) {
 	// Apply options
-	options := &UploadOptions{
-		Public: false,
-	}
+	options := &UploadOptions{Public: false}
 	for _, opt := range opts {
 		opt(options)
 	}
 
-	// Register Action in blockchain
-	// Create metadata
+	// Build metadata with SuperNode SDK
 	meta, price, expiration, err := c.snClient.BuildCascadeMetadataFromFile(ctx, filePath, options.Public)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build metadata: %w", err)
+		return nil, nil, fmt.Errorf("failed to build metadata: %w", err)
 	}
 	metaBytes, err := json.Marshal(&meta)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+		return nil, nil, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	// Construct the action message
+	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration)
+	return msg, metaBytes, nil
+}
+
+// SendRequestActionMessage signs, simulates and broadcasts the provided request message.
+// "memo" can be used to pass an optional filename or idempotency key.
+func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Client, msg *actiontypes.MsgRequestAction, memo string) (*types.ActionResult, error) {
+	if bc == nil || msg == nil {
+		return nil, fmt.Errorf("blockchain client and msg are required")
+	}
+	// Convert string ActionType back to enum expected by blockchain client
+	at := actiontypes.ActionType(0)
+	if v, ok := actiontypes.ActionType_value[msg.ActionType]; ok {
+		at = actiontypes.ActionType(v)
 	}
 
 	// Request Action transaction
+	actionType := msg.GetActionType()
 	c.emitClientEvent(ctx, sdkEvent.Event{
 		Type:      sdkEvent.SDKActionRegistrationRequested,
-		TaskType:  "CASCADE",
+		TaskType:  actionType,
 		Timestamp: time.Now(),
 		Data: sdkEvent.EventData{
-			sdkEvent.KeyEventType:  actiontypes.ActionTypeCascade.String(),
-			sdkEvent.KeyMessage:    options.FileName,
-			sdkEvent.KeyPrice:      price,
-			sdkEvent.KeyExpiration: expiration,
-			sdkEvent.KeyFilePath:   filePath,
+			sdkEvent.KeyEventType:  actionType,
+			sdkEvent.KeyPrice:      msg.Price,
+			sdkEvent.KeyExpiration: msg.ExpirationTime,
 		},
 	})
-	ar, err := bc.RequestActionTx(ctx, creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration, options.FileName)
-	if err != nil {
-		c.logf("request action tx failed: creator=%s file=%s err=%v", creator, filePath, err)
-		return nil, fmt.Errorf("request action tx: %w", err)
+
+	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, memo)
+    if err != nil {
+		return nil, err
 	}
+
 	actionID := ar.ActionID
-	regHeight := ar.Height
 	c.emitClientEvent(ctx, sdkEvent.Event{
 		Type:      sdkEvent.SDKActionRegistrationConfirmed,
 		ActionID:  actionID,
-		TaskType:  "CASCADE",
+		TaskType:  actionType,
 		Timestamp: time.Now(),
 		Data: sdkEvent.EventData{
 			sdkEvent.KeyActionID:    actionID,
 			sdkEvent.KeyTxHash:      ar.TxHash,
-			sdkEvent.KeyBlockHeight: regHeight,
+			sdkEvent.KeyBlockHeight: ar.Height,
 		},
 	})
 
-	// Upload file to SN for processing
-	// Create a file signature
+    return ar, err
+}
+
+// CreateApproveActionMessage constructs a MsgApproveAction without broadcasting it.
+func (c *Client) CreateApproveActionMessage(_ context.Context, creator string, actionID string) (*actiontypes.MsgApproveAction, error) {
+	if creator == "" || actionID == "" {
+		return nil, fmt.Errorf("creator and actionID are required")
+	}
+	return blockchain.NewMsgApproveAction(creator, actionID), nil
+}
+
+// SendApproveActionMessage signs, simulates and broadcasts the provided approve message.
+func (c *Client) SendApproveActionMessage(ctx context.Context, bc *blockchain.Client, msg *actiontypes.MsgApproveAction, memo string) (*types.ActionResult, error) {
+	if bc == nil || msg == nil {
+		return nil, fmt.Errorf("blockchain client and msg are required")
+	}
+	return bc.ApproveActionTx(ctx, msg.Creator, msg.ActionId, memo)
+}
+
+// UploadToSupernode uploads the file bytes to SuperNodes keyed by actionID and waits for completion.
+// Returns the resulting taskID upon success.
+func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePath string) (string, error) {
+	if actionID == "" || filePath == "" {
+		return "", fmt.Errorf("actionID and filePath are required")
+	}
+
+	// Create a file signature for upload
 	signature, err := c.snClient.GenerateStartCascadeSignatureFromFile(ctx, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create signature: %w", err)
+		return "", fmt.Errorf("failed to create signature: %w", err)
 	}
 
 	// Start cascade upload via SuperNode SDK
 	taskID, err := c.snClient.StartCascade(ctx, filePath, actionID, signature)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start cascade: %w", err)
+		return "", fmt.Errorf("failed to start cascade: %w", err)
 	}
-	c.emitClientEvent(ctx, sdkEvent.Event{
-		Type:      sdkEvent.SDKCascadeTaskStarted,
-		ActionID:  actionID,
-		TaskType:  "CASCADE",
-		Timestamp: time.Now(),
-		Data: sdkEvent.EventData{
-			sdkEvent.KeyTaskID:   taskID,
-			sdkEvent.KeyActionID: actionID,
-			sdkEvent.KeyFilePath: filePath,
-		},
-	})
 
 	// Wait for task completion
-	task, err := c.tasks.Wait(ctx, taskID)
+	if task, err := c.tasks.Wait(ctx, taskID); err != nil {
+		return "", fmt.Errorf("cascade failed: %w", err)
+	} else {
+		return task.TaskID, nil
+	}
+}
+
+// Upload provides a one-shot convenience helper that performs:
+// 1) CreateRequestActionMessage 2) SendRequestActionMessage 3) UploadToSupernode
+func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Client, filePath string, opts ...UploadOption) (*types.CascadeResult, error) {
+	// Build message
+	msg, _, err := c.CreateRequestActionMessage(ctx, creator, filePath, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("cascade failed: %w", err)
+		return nil, err
+	}
+
+	// Broadcast
+	options := &UploadOptions{Public: false}
+	for _, opt := range opts {
+		opt(options)
+	}
+	ar, err := c.SendRequestActionMessage(ctx, bc, msg, options.FileName)
+	if err != nil {
+		return nil, fmt.Errorf("request action tx: %w", err)
+	}
+
+	// Upload bytes off-chain
+	taskID, err := c.UploadToSupernode(ctx, ar.ActionID, filePath)
+	if err != nil {
+		return nil, err
 	}
 
 	return &types.CascadeResult{
 		ActionResult: types.ActionResult{
-			ActionID: actionID,
+			ActionID: ar.ActionID,
 			TxHash:   ar.TxHash,
-			Height:   regHeight,
+			Height:   ar.Height,
 		},
-		TaskID:   task.TaskID,
+		TaskID:   taskID,
 	}, nil
 }
 

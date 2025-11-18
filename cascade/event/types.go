@@ -54,7 +54,6 @@ const (
 
 	SDKActionRegistrationRequested EventType = "sdk:action_registration_requested"
 	SDKActionRegistrationConfirmed EventType = "sdk:action_registration_confirmed"
-	SDKCascadeTaskStarted          EventType = "sdk:cascade_task_started"
 )
 
 // EventDataKey identifies metadata entries.

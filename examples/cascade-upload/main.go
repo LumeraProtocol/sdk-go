@@ -22,11 +22,11 @@ func main() {
 	keyringBackend := flag.String("keyring-backend", "os", "Keyring backend: os|file|test")
 	keyringDir := flag.String("keyring-dir", "~/.lumera", "Keyring base directory (actual dir appends keyring-<backend> for file/test)")
 	keyName := flag.String("key-name", "my-key", "Key name in the keyring")
-	address := flag.String("address", "lumera1abc...", "Your Lumera address")
 
 	filePath := flag.String("file-path", "", "Path to file to upload (required)")
 	public := flag.Bool("public", true, "Whether upload is public")
 	upFileName := flag.String("file-name", "", "Optional filename override")
+	actionID := flag.String("action-id", "", "Existing action ID to upload bytes for (skips on-chain request)")
 	flag.Parse()
 
 	if strings.TrimSpace(*filePath) == "" {
@@ -44,11 +44,16 @@ func main() {
 		log.Fatalf("Failed to create keyring: %v", err)
 	}
 
+	address, err := sdkcrypto.AddressFromKey(kr, *keyName, "lumera")
+	if err != nil {
+		log.Fatalf("derive owner address: %v\n", err)
+	}
+
 	client, err := lumerasdk.New(ctx, lumerasdk.Config{
 		ChainID:      *chainID,
 		GRPCEndpoint: *grpcEndpoint,
 		RPCEndpoint:  *rpcEndpoint,
-		Address:      *address,
+		Address:      address,
 		KeyName:      *keyName,
 	}, kr)
 	if err != nil {
@@ -56,12 +61,33 @@ func main() {
 	}
 	defer client.Close() //nolint:errcheck
 
+	aid := strings.TrimSpace(*actionID)
+	if aid != "" {
+		fmt.Println("Uploading file bytes to SuperNodes for existing action...")
+		taskID, err := client.Cascade.UploadToSupernode(ctx, aid, *filePath)
+		if err != nil {
+			log.Fatalf("UploadToSupernode failed: %v", err)
+		}
+		fmt.Printf("Upload successful!\n")
+		fmt.Printf("Action ID: %s\n", aid)
+		fmt.Printf("Task ID: %s\n", taskID)
+
+		// Give the chain a moment, then check status
+		time.Sleep(5 * time.Second)
+		action, err := client.Blockchain.Action.GetAction(ctx, aid)
+		if err != nil {
+			log.Fatalf("Failed to get action: %v", err)
+		}
+		fmt.Printf("Action Status: %s\n", action.State)
+		return
+	}
+
 	fmt.Println("Uploading file...")
 	opts := []cascade.UploadOption{cascade.WithPublic(*public)}
 	if fn := strings.TrimSpace(*upFileName); fn != "" {
 		opts = append(opts, cascade.WithFileName(fn))
 	}
-	result, err := client.Cascade.Upload(ctx, *address, client.Blockchain, *filePath, opts...)
+	result, err := client.Cascade.Upload(ctx, address, client.Blockchain, *filePath, opts...)
 	if err != nil {
 		log.Fatalf("Upload failed: %v", err)
 	}

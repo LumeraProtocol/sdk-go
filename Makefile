@@ -15,7 +15,7 @@ sdk: ## Compile all packages in the module (verifies SDK builds)
 build: sdk ## Alias for sdk
 
 # Examples to build (main packages under ./examples)
-EXAMPLES := cascade-upload cascade-download query-actions claim-tokens
+EXAMPLES := action-approve cascade-upload cascade-download query-actions claim-tokens ica-request-tx ica-approve-tx
 BUILD_DIR := build
 
 examples: $(EXAMPLES:%=example-%) ## Build all example binaries into ./build

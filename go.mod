@@ -21,6 +21,7 @@ require (
 
 	// Cosmos SDK dependencies
 	github.com/cosmos/gogoproto v1.7.0
+	github.com/cosmos/ibc-go/v10 v10.3.0
 
 	// gRPC and networking
 	google.golang.org/grpc v1.76.0
@@ -69,7 +70,6 @@ require (
 	github.com/cosmos/go-bip39 v1.0.0 // indirect
 	github.com/cosmos/gogogateway v1.2.0 // indirect
 	github.com/cosmos/iavl v1.2.4 // indirect
-	github.com/cosmos/ibc-go/v10 v10.3.0 // indirect
 	github.com/cosmos/ics23/go v0.11.0 // indirect
 	github.com/cosmos/ledger-cosmos-go v0.14.0 // indirect
 	github.com/danieljoos/wincred v1.2.2 // indirect
@@ -182,6 +182,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250929231259-57b25ae835d4 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
@@ -191,7 +192,5 @@ require (
 
 // Local development - uncomment these for local testing
 // Remove these lines before releasing
-replace (
 // 	github.com/LumeraProtocol/lumera => ../lumera
- 	github.com/LumeraProtocol/supernode/v2 => ../supernode
-)
+//replace github.com/LumeraProtocol/supernode/v2 => ../supernode

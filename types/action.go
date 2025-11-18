@@ -35,12 +35,12 @@ const (
 type ActionState string
 
 const (
-	ActionStatePending    ActionState = "PENDING"
-	ActionStateProcessing ActionState = "PROCESSING"
-	ActionStateDone       ActionState = "DONE"
-	ActionStateApproved   ActionState = "APPROVED"
-	ActionStateFailed     ActionState = "FAILED"
-	ActionStateExpired    ActionState = "EXPIRED"
+	ActionStatePending    ActionState = "ACTION_STATE_PENDING"
+	ActionStateProcessing ActionState = "ACTION_STATE_PROCESSING"
+	ActionStateDone       ActionState = "ACTION_STATE_DONE"
+	ActionStateApproved   ActionState = "ACTION_STATE_APPROVED"
+	ActionStateFailed     ActionState = "ACTION_STATE_FAILED"
+	ActionStateExpired    ActionState = "ACTION_STATE_EXPIRED"
 )
 
 // ActionMetadata is an interface for different action metadata types
