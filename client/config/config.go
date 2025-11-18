@@ -61,7 +61,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("grpc_addr is required")
 	}
 	if c.RPCEndpoint == "" {
-		return fmt.Errorf("rpc_addr is required")
+		return fmt.Errorf("rpc_endpoint is required")
 	}
 	if c.Address == "" {
 		return fmt.Errorf("address is required")

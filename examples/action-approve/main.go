@@ -50,11 +50,11 @@ func main() {
 
 	// Initialize unified Lumera client
 	client, err := lumerasdk.New(ctx, lumerasdk.Config{
-		ChainID:  *chainID,
+		ChainID:      *chainID,
 		GRPCEndpoint: *grpcEndpoint,
-		RPCEndpoint: *rpcEndpoint,
-		Address:  address,
-		KeyName:  *keyName,
+		RPCEndpoint:  *rpcEndpoint,
+		Address:      address,
+		KeyName:      *keyName,
 	}, kr)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
