@@ -4,7 +4,7 @@
 # Go SDK + examples for the Lumera blockchain.
 # Run `make` (or `make sdk` / `make examples`) to build; `make help` lists targets.
 
-.PHONY: help all sdk build examples example-% test lint clean tidy deps install
+.PHONY: help all sdk build examples example-% test lint clean tidy deps install install-tools
 
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
@@ -43,7 +43,12 @@ test: ## Run tests with race detector and coverage
 
 lint: ## Run linters (requires golangci-lint)
 	@echo "Running linters..."
-	@$(GOLANGCI_LINT) run --timeout=5m
+	@$(GOLANGCI_LINT) run ./... --timeout=5m
+
+install-tools: ## Install required developer tools
+	@echo "Installing golangci-lint (latest)..."
+	@$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "Tool installation complete."
 
 tidy: ## Tidy go modules
 	@$(GO) mod tidy

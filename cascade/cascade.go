@@ -9,6 +9,7 @@ import (
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
 	sdkEvent "github.com/LumeraProtocol/sdk-go/cascade/event"
+	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
 	"github.com/LumeraProtocol/sdk-go/types"
 )
 
@@ -53,6 +54,7 @@ func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string,
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
+	c.logf("cascade: built metadata for %s (public=%t price=%s expires=%d)", filePath, options.Public, price, expiration)
 
 	// Construct the action message
 	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration)
@@ -84,6 +86,7 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 		},
 	})
 
+	c.logf("cascade: submitting request action tx creator=%s memo=%s price=%s expires=%d", msg.Creator, memo, msg.Price, msg.ExpirationTime)
 	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, memo)
 	if err != nil {
 		return nil, err
@@ -101,8 +104,9 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 			sdkEvent.KeyBlockHeight: ar.Height,
 		},
 	})
+	c.logf("cascade: request action confirmed action_id=%s height=%d tx=%s", actionID, ar.Height, ar.TxHash)
 
-    return ar, err
+	return ar, err
 }
 
 // CreateApproveActionMessage constructs a MsgApproveAction without broadcasting it.
@@ -135,6 +139,7 @@ func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePat
 	}
 
 	// Start cascade upload via SuperNode SDK
+	c.logf("cascade: starting supernode upload action_id=%s file=%s", actionID, filePath)
 	taskID, err := c.snClient.StartCascade(ctx, filePath, actionID, signature)
 	if err != nil {
 		return "", fmt.Errorf("failed to start cascade: %w", err)
@@ -144,6 +149,7 @@ func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePat
 	if task, err := c.tasks.Wait(ctx, taskID); err != nil {
 		return "", fmt.Errorf("cascade failed: %w", err)
 	} else {
+		c.logf("cascade: supernode upload completed action_id=%s task_id=%s", actionID, task.TaskID)
 		return task.TaskID, nil
 	}
 }
@@ -179,7 +185,7 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 			TxHash:   ar.TxHash,
 			Height:   ar.Height,
 		},
-		TaskID:   taskID,
+		TaskID: taskID,
 	}, nil
 }
 
@@ -206,6 +212,7 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 	}
 
 	// Start download via SuperNode SDK
+	c.logf("cascade: starting download action_id=%s dest=%s", actionID, outputDir)
 	taskID, err := c.snClient.DownloadCascade(ctx, actionID, outputDir, signature)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start download: %w", err)
@@ -216,6 +223,7 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 	if err != nil {
 		return nil, fmt.Errorf("download failed: %w", err)
 	}
+	c.logf("cascade: download completed action_id=%s task_id=%s", actionID, task.TaskID)
 
 	return &types.DownloadResult{
 		ActionID:   actionID,
@@ -224,14 +232,15 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 	}, nil
 }
 
-func (c *Client) logf(format string, args ...interface{}) {
-	if c.logger != nil {
-		c.logger.Printf(format, args...)
-	}
-}
-
 func (c *Client) emitClientEvent(ctx context.Context, evt sdkEvent.Event) {
 	if c.isLocalEventType(evt.Type) {
 		c.emitLocalEvent(ctx, evt)
 	}
+}
+
+func (c *Client) logf(format string, args ...interface{}) {
+	if c.logger == nil {
+		return
+	}
+	sdklog.Infof(c.logger, format, args...)
 }

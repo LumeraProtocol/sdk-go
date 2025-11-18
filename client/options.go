@@ -3,6 +3,7 @@ package client
 import (
 	"time"
 
+	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
 )
 
@@ -16,17 +17,24 @@ func WithChainID(chainID string) Option {
 	}
 }
 
-// WithGRPCAddr sets the gRPC address
-func WithGRPCAddr(addr string) Option {
+// WithKeyName sets the key name in the keyring.
+func WithKeyName(name string) Option {
 	return func(c *Config) {
-		c.GRPCEndpoint = addr
+		c.KeyName = name
 	}
 }
 
-// WithRPCAddr sets the Tendermint RPC endpoint.
-func WithRPCAddr(addr string) Option {
+// WithGRPCEndpoint sets the gRPC address.
+func WithGRPCEndpoint(endpoint string) Option {
 	return func(c *Config) {
-		c.RPCEndpoint = addr
+		c.GRPCEndpoint = endpoint
+	}
+}
+
+// WithRPCEndpoint sets the Tendermint RPC endpoint.
+func WithRPCEndpoint(endpoint string) Option {
+	return func(c *Config) {
+		c.RPCEndpoint = endpoint
 	}
 }
 
@@ -56,6 +64,13 @@ func WithMaxMessageSize(size int) Option {
 	return func(c *Config) {
 		c.MaxRecvMsgSize = size
 		c.MaxSendMsgSize = size
+	}
+}
+
+// WithWaitTxConfig overrides the wait-for-tx behavior.
+func WithWaitTxConfig(waitCfg clientconfig.WaitTxConfig) Option {
+	return func(c *Config) {
+		c.WaitTx = waitCfg
 	}
 }
 

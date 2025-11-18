@@ -46,13 +46,13 @@ func (s *subscriber) Wait(ctx context.Context, txHash string) (Result, error) {
 				continue
 			}
 			flat := make(map[string][]string)
-			for _, e := range txev.TxResult.Result.Events {
+			for _, e := range txev.Result.Events {
 				for _, a := range e.Attributes {
 					key := e.Type + "." + string(a.Key)
 					flat[key] = append(flat[key], string(a.Value))
 				}
 			}
-			return Result{Code: uint32(txev.TxResult.Result.Code), Events: flat}, nil
+			return Result{Code: uint32(txev.Result.Code), Events: flat}, nil
 		}
 	}
 }
