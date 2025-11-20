@@ -2,6 +2,16 @@ module github.com/LumeraProtocol/sdk-go
 
 go 1.25.1
 
+// Pin compatible versions to prevent go mod tidy from updating
+replace (
+	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.14
+
+// Local development - uncomment these for local testing
+// Comment these lines before releasing
+// 	github.com/LumeraProtocol/lumera => ../lumera
+//  github.com/LumeraProtocol/supernode/v2 => ../supernode
+)
+
 require (
 	cosmossdk.io/api v0.9.2
 
@@ -9,21 +19,20 @@ require (
 	github.com/LumeraProtocol/lumera v1.8.4
 
 	// SuperNode SDK for storage operations
-	github.com/LumeraProtocol/supernode/v2 v2.4.2
+	github.com/LumeraProtocol/supernode/v2 v2.4.4
+	github.com/cometbft/cometbft v0.38.18
+	github.com/cosmos/cosmos-sdk v0.53.0
 
 	// Cosmos SDK dependencies
-	github.com/cosmos/cosmos-sdk v0.53.0
 	github.com/cosmos/gogoproto v1.7.0
+	github.com/cosmos/ibc-go/v10 v10.3.0
 
 	// gRPC and networking
 	google.golang.org/grpc v1.76.0
-	google.golang.org/protobuf v1.36.10 // indirect
 
 	// Utilities
 	lukechampine.com/blake3 v1.4.1
 )
-
-require github.com/cosmos/ibc-go/v10 v10.3.0
 
 require (
 	cosmossdk.io/collections v1.3.0 // indirect
@@ -57,7 +66,6 @@ require (
 	github.com/cockroachdb/pebble v1.1.5 // indirect
 	github.com/cockroachdb/redact v1.1.6 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
-	github.com/cometbft/cometbft v0.38.18 // indirect
 	github.com/cometbft/cometbft-db v0.14.1 // indirect
 	github.com/cosmos/btcutil v1.0.5 // indirect
 	github.com/cosmos/cosmos-db v1.1.2 // indirect
@@ -176,6 +184,7 @@ require (
 	google.golang.org/genproto v0.0.0-20250505200425-f936aa4a68b2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250929231259-57b25ae835d4 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
@@ -183,13 +192,3 @@ require (
 	pgregory.net/rapid v1.2.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
-
-// Pin compatible versions to prevent go mod tidy from updating
-replace github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.14
-
-// Local development - uncomment these for local testing
-// Remove these lines before releasing
-// replace (
-// 	github.com/LumeraProtocol/lumera => ../lumera
-// 	github.com/LumeraProtocol/supernode/v2 => ../supernode
-// )

@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
+	sdkEvent "github.com/LumeraProtocol/sdk-go/cascade/event"
+	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
 	"github.com/LumeraProtocol/sdk-go/types"
 )
 
@@ -51,6 +54,7 @@ func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string,
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
+	c.logf("cascade: built metadata for %s (public=%t price=%s expires=%s)", filePath, options.Public, price, expiration)
 
 	// Construct the action message
 	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration)
@@ -68,7 +72,41 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 	if v, ok := actiontypes.ActionType_value[msg.ActionType]; ok {
 		at = actiontypes.ActionType(v)
 	}
-	return bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, memo)
+
+	// Request Action transaction
+	taskType := normalizeTaskType(msg.GetActionType())
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKActionRegistrationRequested,
+		TaskType:  taskType,
+		Timestamp: time.Now(),
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyEventType:  taskType,
+			sdkEvent.KeyPrice:      msg.Price,
+			sdkEvent.KeyExpiration: msg.ExpirationTime,
+		},
+	})
+
+	c.logf("cascade: submitting request action tx creator=%s memo=%s price=%s expires=%s", msg.Creator, memo, msg.Price, msg.ExpirationTime)
+	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, memo)
+	if err != nil {
+		return nil, err
+	}
+
+	actionID := ar.ActionID
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKActionRegistrationConfirmed,
+		ActionID:  actionID,
+		TaskType:  taskType,
+		Timestamp: time.Now(),
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyActionID:    actionID,
+			sdkEvent.KeyTxHash:      ar.TxHash,
+			sdkEvent.KeyBlockHeight: ar.Height,
+		},
+	})
+	c.logf("cascade: request action confirmed action_id=%s height=%d tx=%s", actionID, ar.Height, ar.TxHash)
+
+	return ar, err
 }
 
 // CreateApproveActionMessage constructs a MsgApproveAction without broadcasting it.
@@ -101,6 +139,7 @@ func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePat
 	}
 
 	// Start cascade upload via SuperNode SDK
+	c.logf("cascade: starting supernode upload action_id=%s file=%s", actionID, filePath)
 	taskID, err := c.snClient.StartCascade(ctx, filePath, actionID, signature)
 	if err != nil {
 		return "", fmt.Errorf("failed to start cascade: %w", err)
@@ -110,6 +149,7 @@ func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePat
 	if task, err := c.tasks.Wait(ctx, taskID); err != nil {
 		return "", fmt.Errorf("cascade failed: %w", err)
 	} else {
+		c.logf("cascade: supernode upload completed action_id=%s task_id=%s", actionID, task.TaskID)
 		return task.TaskID, nil
 	}
 }
@@ -139,7 +179,14 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 		return nil, err
 	}
 
-	return &types.CascadeResult{ActionID: ar.ActionID, TaskID: taskID}, nil
+	return &types.CascadeResult{
+		ActionResult: types.ActionResult{
+			ActionID: ar.ActionID,
+			TxHash:   ar.TxHash,
+			Height:   ar.Height,
+		},
+		TaskID: taskID,
+	}, nil
 }
 
 // DownloadOptions configures cascade download
@@ -165,6 +212,7 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 	}
 
 	// Start download via SuperNode SDK
+	c.logf("cascade: starting download action_id=%s dest=%s", actionID, outputDir)
 	taskID, err := c.snClient.DownloadCascade(ctx, actionID, outputDir, signature)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start download: %w", err)
@@ -175,10 +223,39 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 	if err != nil {
 		return nil, fmt.Errorf("download failed: %w", err)
 	}
+	c.logf("cascade: download completed action_id=%s task_id=%s", actionID, task.TaskID)
 
 	return &types.DownloadResult{
 		ActionID:   actionID,
 		TaskID:     task.TaskID,
 		OutputPath: outputDir + "/" + actionID,
 	}, nil
+}
+
+func (c *Client) emitClientEvent(ctx context.Context, evt sdkEvent.Event) {
+	if c.isLocalEventType(evt.Type) {
+		c.emitLocalEvent(ctx, evt)
+	}
+}
+
+func (c *Client) logf(format string, args ...interface{}) {
+	if c.logger == nil {
+		return
+	}
+	sdklog.Infof(c.logger, format, args...)
+}
+
+func normalizeTaskType(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if val, ok := actiontypes.ActionType_value[raw]; ok {
+		switch actiontypes.ActionType(val) {
+		case actiontypes.ActionTypeCascade:
+			return string(types.ActionTypeCascade)
+		case actiontypes.ActionTypeSense:
+			return string(types.ActionTypeSense)
+		}
+	}
+	return raw
 }

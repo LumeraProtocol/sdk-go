@@ -3,12 +3,16 @@ package cascade
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/LumeraProtocol/lumera/x/lumeraid/securekeyx"
 	snsdk "github.com/LumeraProtocol/supernode/v2/sdk/action"
 	snconfig "github.com/LumeraProtocol/supernode/v2/sdk/config"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+
+	sdkEvent "github.com/LumeraProtocol/sdk-go/cascade/event"
+	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
 )
 
 // Config for a cascade client
@@ -26,16 +30,20 @@ type Client struct {
 	tasks    *TaskManager
 	config   Config
 	keyring  keyring.Keyring
+	logger   sdklog.Logger
+
+	subMu        sync.RWMutex
+	localSubs    map[sdkEvent.EventType][]sdkEvent.Handler
+	localSubsAll []sdkEvent.Handler
 }
 
 // New creates a new cascade client
 func New(ctx context.Context, cfg Config, kr keyring.Keyring) (*Client, error) {
 	// Create SuperNode SDK config
 	accountCfg := snconfig.AccountConfig{
-		LocalCosmosAddress: cfg.Address,
-		KeyName:            cfg.KeyName,
-		Keyring:            kr,
-		PeerType:           securekeyx.Simplenode,
+		KeyName:  cfg.KeyName,
+		Keyring:  kr,
+		PeerType: securekeyx.Simplenode,
 	}
 
 	lumeraCfg := snconfig.LumeraConfig{
@@ -60,11 +68,17 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring) (*Client, error) {
 	taskMgr := NewTaskManager(snClient)
 
 	return &Client{
-		snClient: snClient, // store single-level pointer
-		tasks:    taskMgr,
-		config:   cfg,
-		keyring:  kr,
+		snClient:  snClient, // store single-level pointer
+		tasks:     taskMgr,
+		config:    cfg,
+		keyring:   kr,
+		localSubs: make(map[sdkEvent.EventType][]sdkEvent.Handler),
 	}, nil
+}
+
+// SetLogger configures optional diagnostics logging.
+func (c *Client) SetLogger(logger sdklog.Logger) {
+	c.logger = logger
 }
 
 // Close closes the cascade client
@@ -72,4 +86,39 @@ func (c *Client) Close() error {
 	// SuperNode SDK client doesn't have a Close method yet
 	// Add if/when it's implemented
 	return nil
+}
+
+func (c *Client) isLocalEventType(t sdkEvent.EventType) bool {
+	switch t {
+	case sdkEvent.SDKActionRegistrationRequested, sdkEvent.SDKActionRegistrationConfirmed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Client) addLocalSubscriber(t sdkEvent.EventType, handler sdkEvent.Handler) {
+	c.subMu.Lock()
+	defer c.subMu.Unlock()
+	c.localSubs[t] = append(c.localSubs[t], handler)
+}
+
+func (c *Client) addLocalAll(handler sdkEvent.Handler) {
+	c.subMu.Lock()
+	defer c.subMu.Unlock()
+	c.localSubsAll = append(c.localSubsAll, handler)
+}
+
+func (c *Client) emitLocalEvent(ctx context.Context, evt sdkEvent.Event) {
+	c.subMu.RLock()
+	handlers := append([]sdkEvent.Handler{}, c.localSubs[evt.Type]...)
+	all := append([]sdkEvent.Handler{}, c.localSubsAll...)
+	c.subMu.RUnlock()
+
+	for _, h := range handlers {
+		h(ctx, evt)
+	}
+	for _, h := range all {
+		h(ctx, evt)
+	}
 }

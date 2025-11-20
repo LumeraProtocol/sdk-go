@@ -17,6 +17,7 @@ func main() {
 	ctx := context.Background()
 
 	grpcEndpoint := flag.String("grpc-endpoint", "localhost:9090", "Lumera gRPC endpoint")
+	rpcEndpoint := flag.String("rpc-endpoint", "http://localhost:26657", "Lumera RPC endpoint")
 	chainID := flag.String("chain-id", "lumera-testnet-2", "Chain ID")
 	keyringBackend := flag.String("keyring-backend", "os", "Keyring backend: os|file|test")
 	keyringDir := flag.String("keyring-dir", "~/.lumera", "Keyring base directory (actual dir appends keyring-<backend> for file/test)")
@@ -41,10 +42,11 @@ func main() {
 	}
 
 	client, err := lumerasdk.New(ctx, lumerasdk.Config{
-		ChainID:  *chainID,
-		GRPCAddr: *grpcEndpoint,
-		Address:  *address,
-		KeyName:  *keyName,
+		ChainID:      *chainID,
+		GRPCEndpoint: *grpcEndpoint,
+		RPCEndpoint:  *rpcEndpoint,
+		Address:      *address,
+		KeyName:      *keyName,
 	}, kr)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)

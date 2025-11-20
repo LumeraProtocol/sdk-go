@@ -1,6 +1,11 @@
 package client
 
-import "time"
+import (
+	"time"
+
+	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
+	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
+)
 
 // Option is a function that modifies Config
 type Option func(*Config)
@@ -12,10 +17,24 @@ func WithChainID(chainID string) Option {
 	}
 }
 
-// WithGRPCAddr sets the gRPC address
-func WithGRPCAddr(addr string) Option {
+// WithKeyName sets the key name in the keyring.
+func WithKeyName(name string) Option {
 	return func(c *Config) {
-		c.GRPCAddr = addr
+		c.KeyName = name
+	}
+}
+
+// WithGRPCEndpoint sets the gRPC address.
+func WithGRPCEndpoint(endpoint string) Option {
+	return func(c *Config) {
+		c.GRPCEndpoint = endpoint
+	}
+}
+
+// WithRPCEndpoint sets the CometBFT RPC endpoint.
+func WithRPCEndpoint(endpoint string) Option {
+	return func(c *Config) {
+		c.RPCEndpoint = endpoint
 	}
 }
 
@@ -48,3 +67,16 @@ func WithMaxMessageSize(size int) Option {
 	}
 }
 
+// WithWaitTxConfig overrides the wait-for-tx behavior.
+func WithWaitTxConfig(waitCfg clientconfig.WaitTxConfig) Option {
+	return func(c *Config) {
+		c.WaitTx = waitCfg
+	}
+}
+
+// WithLogger enables diagnostic logging using the provided logger.
+func WithLogger(logger sdklog.Logger) Option {
+	return func(c *Config) {
+		c.Logger = logger
+	}
+}

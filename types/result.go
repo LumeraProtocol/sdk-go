@@ -1,12 +1,5 @@
 package types
 
-// CascadeResult contains the result of a cascade operation
-type CascadeResult struct {
-	ActionID string
-	TaskID   string
-	TxHash   string
-}
-
 // DownloadResult contains the result of a download operation
 type DownloadResult struct {
 	ActionID   string
@@ -19,4 +12,10 @@ type ActionResult struct {
 	ActionID string
 	TxHash   string
 	Height   int64
+}
+
+// CascadeResult contains the result of a cascade operation
+type CascadeResult struct {
+	ActionResult
+	TaskID   string
 }

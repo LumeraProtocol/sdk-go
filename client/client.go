@@ -8,6 +8,7 @@ import (
 
 	"github.com/LumeraProtocol/sdk-go/blockchain"
 	"github.com/LumeraProtocol/sdk-go/cascade"
+	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
 )
 
 // Client provides unified access to Lumera blockchain and storage
@@ -19,6 +20,7 @@ type Client struct {
 	// Configuration
 	config  *Config
 	keyring keyring.Keyring
+	logger  sdklog.Logger
 }
 
 // New creates a new unified Lumera client
@@ -36,10 +38,12 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 	// Initialize blockchain client
 	blockchainClient, err := blockchain.New(ctx, blockchain.Config{
 		ChainID:        cfg.ChainID,
-		GRPCAddr:       cfg.GRPCAddr,
+		GRPCAddr:       cfg.GRPCEndpoint,
+		RPCEndpoint:    cfg.RPCEndpoint,
 		Timeout:        cfg.BlockchainTimeout,
 		MaxRecvMsgSize: cfg.MaxRecvMsgSize,
 		MaxSendMsgSize: cfg.MaxSendMsgSize,
+		WaitTx:         cfg.WaitTx,
 	}, kr, cfg.KeyName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize blockchain client: %w", err)
@@ -48,7 +52,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 	// Initialize cascade client (wraps SuperNode SDK)
 	cascadeClient, err := cascade.New(ctx, cascade.Config{
 		ChainID:  cfg.ChainID,
-		GRPCAddr: cfg.GRPCAddr,
+		GRPCAddr: cfg.GRPCEndpoint,
 		Address:  cfg.Address,
 		KeyName:  cfg.KeyName,
 		Timeout:  cfg.StorageTimeout,
@@ -60,12 +64,14 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 		}
 		return nil, fmt.Errorf("failed to initialize cascade client: %w", err)
 	}
+	cascadeClient.SetLogger(cfg.Logger)
 
 	return &Client{
 		Blockchain: blockchainClient,
 		Cascade:    cascadeClient,
 		config:     &cfg,
 		keyring:    kr,
+		logger:     cfg.Logger,
 	}, nil
 }
 
