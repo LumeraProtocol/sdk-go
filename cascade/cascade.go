@@ -54,7 +54,7 @@ func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string,
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
-	c.logf("cascade: built metadata for %s (public=%t price=%s expires=%d)", filePath, options.Public, price, expiration)
+	c.logf("cascade: built metadata for %s (public=%t price=%s expires=%s)", filePath, options.Public, price, expiration)
 
 	// Construct the action message
 	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration)
@@ -86,7 +86,7 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 		},
 	})
 
-	c.logf("cascade: submitting request action tx creator=%s memo=%s price=%s expires=%d", msg.Creator, memo, msg.Price, msg.ExpirationTime)
+	c.logf("cascade: submitting request action tx creator=%s memo=%s price=%s expires=%s", msg.Creator, memo, msg.Price, msg.ExpirationTime)
 	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, memo)
 	if err != nil {
 		return nil, err
