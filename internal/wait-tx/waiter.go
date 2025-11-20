@@ -66,7 +66,6 @@ func (w *Waiter) Wait(ctx context.Context, txHash string, timeout time.Duration)
 		case <-subCtx.Done():
 		case <-errCh:
 		case res := <-resCh:
-			cancel()
 			return res, nil
 		}
 		cancel()
