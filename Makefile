@@ -30,6 +30,7 @@ go.sum: go.mod
 	@echo "Verifying and tidying go modules..."
 	@$(GO) mod verify
 	@$(GO) mod tidy
+	@touch go.sum
 
 # Examples to build (main packages under ./examples)
 examples: $(EXAMPLES:%=example-%) ## Build all example binaries into ./build
