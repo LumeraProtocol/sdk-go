@@ -18,13 +18,19 @@ help: ## Display this help screen
 	@grep -h -E '^[a-zA-Z0-9_/-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-28s\033[0m %s\n", $$1, $$2}'
 
 # SDK/library compile check (Go libs are compiled as part of go build; no artifact)
-sdk: ## Compile all packages in the module (verifies SDK builds)
+sdk: go.sum ## Compile all packages in the module (verifies SDK builds)
 	@echo "Compiling SDK (library packages)..."
 	@$(GO) build ./...
 	@echo "SDK build completed successfully."
 
 # Alias for backward compatibility
 build: sdk ## Alias for sdk
+
+go.sum: go.mod
+	@echo "Verifying and tidying go modules..."
+	@$(GO) mod verify
+	@$(GO) mod tidy
+	@touch go.sum
 
 # Examples to build (main packages under ./examples)
 examples: $(EXAMPLES:%=example-%) ## Build all example binaries into ./build
