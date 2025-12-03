@@ -16,8 +16,8 @@ import (
 
 // UploadOptions configures cascade upload
 type UploadOptions struct {
-	ID 	     string // optional custom ID for the upload
-	Public   bool	// whether the uploaded file will be accessible publicly
+	ID     string // optional custom ID for the upload
+	Public bool   // whether the uploaded file will be accessible publicly
 }
 
 // UploadOption is a functional option for Upload
