@@ -39,7 +39,7 @@ func WithID(id string) UploadOption {
 // CreateRequestActionMessage builds Cascade metadata and constructs a MsgRequestAction without broadcasting it.
 // Returns the built Cosmos message and the serialized metadata bytes used in the message.
 func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string, filePath string, options *UploadOptions) (*actiontypes.MsgRequestAction, []byte, error) {
-	var isPublic bool = false
+	var isPublic bool
 	if options != nil {
 		isPublic = options.Public
 	}
