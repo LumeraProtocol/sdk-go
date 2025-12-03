@@ -61,7 +61,7 @@ func main() {
 	defer client.Close() //nolint:errcheck
 
 	opts := []cascade.UploadOption{cascade.WithPublic(*public)}
-	opts = append(opts, cascade.WithID("1")) // optional custom ID for action registration tracking
+	opts = append(opts, cascade.WithID("example-upload-001")) // optional custom ID for action registration tracking
 
 	aid := strings.TrimSpace(*actionID)
 	if aid != "" {

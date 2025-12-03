@@ -181,7 +181,7 @@ func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Clie
 	for _, opt := range opts {
 		opt(options)
 	}
-	
+
 	// Build message
 	msg, _, err := c.CreateRequestActionMessage(ctx, creator, filePath, options)
 	if err != nil {
@@ -283,7 +283,7 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 		TaskType:  taskType,
 		TaskID:    taskID,
 		Data: sdkEvent.EventData{
-			sdkEvent.KeyMessage: "Cascade download task started",
+			sdkEvent.KeyMessage: "Cascade download task completed",
 		},
 		Timestamp: time.Now(),
 	})
