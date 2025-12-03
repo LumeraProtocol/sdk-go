@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+	"path/filepath"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
@@ -15,8 +16,8 @@ import (
 
 // UploadOptions configures cascade upload
 type UploadOptions struct {
-	Public   bool
-	FileName string
+	ID 	     string // optional custom ID for the upload
+	Public   bool	// whether the uploaded file will be accessible publicly
 }
 
 // UploadOption is a functional option for Upload
@@ -29,24 +30,21 @@ func WithPublic(public bool) UploadOption {
 	}
 }
 
-// WithFileName sets a custom filename
-func WithFileName(name string) UploadOption {
+// WithID sets a custom ID
+func WithID(id string) UploadOption {
 	return func(o *UploadOptions) {
-		o.FileName = name
+		o.ID = id
 	}
 }
-
 // CreateRequestActionMessage builds Cascade metadata and constructs a MsgRequestAction without broadcasting it.
 // Returns the built Cosmos message and the serialized metadata bytes used in the message.
-func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string, filePath string, opts ...UploadOption) (*actiontypes.MsgRequestAction, []byte, error) {
-	// Apply options
-	options := &UploadOptions{Public: false}
-	for _, opt := range opts {
-		opt(options)
+func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string, filePath string, options *UploadOptions) (*actiontypes.MsgRequestAction, []byte, error) {
+	var isPublic bool = false
+	if options != nil {
+		isPublic = options.Public
 	}
-
 	// Build metadata with SuperNode SDK
-	meta, price, expiration, err := c.snClient.BuildCascadeMetadataFromFile(ctx, filePath, options.Public)
+	meta, price, expiration, err := c.snClient.BuildCascadeMetadataFromFile(ctx, filePath, isPublic)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build metadata: %w", err)
 	}
@@ -54,7 +52,7 @@ func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string,
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
-	c.logf("cascade: built metadata for %s (public=%t price=%s expires=%s)", filePath, options.Public, price, expiration)
+	c.logf("cascade: built metadata for %s (public=%t price=%s expires=%s)", filePath, isPublic, price, expiration)
 
 	// Construct the action message
 	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration)
@@ -63,7 +61,8 @@ func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string,
 
 // SendRequestActionMessage signs, simulates and broadcasts the provided request message.
 // "memo" can be used to pass an optional filename or idempotency key.
-func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Client, msg *actiontypes.MsgRequestAction, memo string) (*types.ActionResult, error) {
+func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Client, msg *actiontypes.MsgRequestAction, 
+	memo string, options *UploadOptions) (*types.ActionResult, error) {
 	if bc == nil || msg == nil {
 		return nil, fmt.Errorf("blockchain client and msg are required")
 	}
@@ -73,16 +72,22 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 		at = actiontypes.ActionType(v)
 	}
 
+	var id string
+	if options != nil {
+		id = options.ID
+	}
+
 	// Request Action transaction
 	taskType := normalizeTaskType(msg.GetActionType())
 	c.emitClientEvent(ctx, sdkEvent.Event{
-		Type:      sdkEvent.SDKActionRegistrationRequested,
+		Type:      sdkEvent.SDKGoActionRegistrationRequested,
 		TaskType:  taskType,
+		TaskID: id,
 		Timestamp: time.Now(),
 		Data: sdkEvent.EventData{
-			sdkEvent.KeyEventType:  taskType,
 			sdkEvent.KeyPrice:      msg.Price,
 			sdkEvent.KeyExpiration: msg.ExpirationTime,
+			sdkEvent.KeyMessage:    "Action registration requested",
 		},
 	})
 
@@ -94,14 +99,15 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 
 	actionID := ar.ActionID
 	c.emitClientEvent(ctx, sdkEvent.Event{
-		Type:      sdkEvent.SDKActionRegistrationConfirmed,
+		Type:      sdkEvent.SDKGoActionRegistrationConfirmed,
 		ActionID:  actionID,
+		TaskID:    id,
 		TaskType:  taskType,
 		Timestamp: time.Now(),
 		Data: sdkEvent.EventData{
-			sdkEvent.KeyActionID:    actionID,
 			sdkEvent.KeyTxHash:      ar.TxHash,
 			sdkEvent.KeyBlockHeight: ar.Height,
+			sdkEvent.KeyMessage:    "Action registration confirmed",
 		},
 	})
 	c.logf("cascade: request action confirmed action_id=%s height=%d tx=%s", actionID, ar.Height, ar.TxHash)
@@ -144,6 +150,16 @@ func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePat
 	if err != nil {
 		return "", fmt.Errorf("failed to start cascade: %w", err)
 	}
+	// emit upload started event
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKGoUploadStarted,
+		ActionID:  actionID,
+		TaskID:    taskID,
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyMessage: "Cascade upload task started",
+		},
+		Timestamp: time.Now(),
+	})
 
 	// Wait for task completion
 	if task, err := c.tasks.Wait(ctx, taskID); err != nil {
@@ -155,20 +171,28 @@ func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePat
 }
 
 // Upload provides a one-shot convenience helper that performs:
-// 1) CreateRequestActionMessage 2) SendRequestActionMessage 3) UploadToSupernode
+//   1) CreateRequestActionMessage
+//   2) SendRequestActionMessage
+//   3) UploadToSupernode
 func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Client, filePath string, opts ...UploadOption) (*types.CascadeResult, error) {
-	// Build message
-	msg, _, err := c.CreateRequestActionMessage(ctx, creator, filePath, opts...)
-	if err != nil {
-		return nil, err
-	}
 
-	// Broadcast
+	// Apply upload options
 	options := &UploadOptions{Public: false}
 	for _, opt := range opts {
 		opt(options)
 	}
-	ar, err := c.SendRequestActionMessage(ctx, bc, msg, options.FileName)
+	
+	// Build message
+	msg, _, err := c.CreateRequestActionMessage(ctx, creator, filePath, options)
+	if err != nil {
+		return nil, err
+	}
+
+	// extract filename from path
+	fileName := filepath.Base(filePath)
+
+	// Broadcast
+	ar, err := c.SendRequestActionMessage(ctx, bc, msg, fileName, options)
 	if err != nil {
 		return nil, fmt.Errorf("request action tx: %w", err)
 	}
@@ -205,14 +229,36 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 		opt(options)
 	}
 
+	taskType := string(types.ActionTypeCascade)
+	c.logf("cascade: starting download, action=%s dest=%s", actionID, outputDir)
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKGoDownloadStarted,
+		ActionID:  actionID,
+		TaskType:  taskType,
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyMessage: "Cascade download task started",
+		},
+		Timestamp: time.Now(),
+	})
+
 	// Create download signature
 	signature, err := c.snClient.GenerateDownloadSignature(ctx, actionID, c.config.Address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create signature: %w", err)
 	}
 
+	c.logf("cascade: download signature generated, action=%s", actionID)
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKGoDownloadSignatureGenerated,
+		ActionID:  actionID,
+		TaskType:  taskType,
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyMessage: "Cascade download signature generated",
+		},
+		Timestamp: time.Now(),
+	})
+
 	// Start download via SuperNode SDK
-	c.logf("cascade: starting download action_id=%s dest=%s", actionID, outputDir)
 	taskID, err := c.snClient.DownloadCascade(ctx, actionID, outputDir, signature)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start download: %w", err)
@@ -223,13 +269,26 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 	if err != nil {
 		return nil, fmt.Errorf("download failed: %w", err)
 	}
-	c.logf("cascade: download completed action_id=%s task_id=%s", actionID, task.TaskID)
 
-	return &types.DownloadResult{
+	result := &types.DownloadResult{
 		ActionID:   actionID,
 		TaskID:     task.TaskID,
 		OutputPath: outputDir + "/" + actionID,
-	}, nil
+	}
+
+	c.logf("cascade: download completed action_id=%s task_id=%s", actionID, taskID)
+	c.emitClientEvent(ctx, sdkEvent.Event{
+		Type:      sdkEvent.SDKGoDownloadCompleted,
+		ActionID:  actionID,
+		TaskType:  taskType,
+		TaskID:    taskID,
+		Data: sdkEvent.EventData{
+			sdkEvent.KeyMessage: "Cascade download task started",
+		},
+		Timestamp: time.Now(),
+	})
+
+	return result, nil
 }
 
 func (c *Client) emitClientEvent(ctx context.Context, evt sdkEvent.Event) {

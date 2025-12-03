@@ -25,7 +25,6 @@ func main() {
 
 	filePath := flag.String("file-path", "", "Path to file to upload (required)")
 	public := flag.Bool("public", true, "Whether upload is public")
-	upFileName := flag.String("file-name", "", "Optional filename override")
 	actionID := flag.String("action-id", "", "Existing action ID to upload bytes for (skips on-chain request)")
 	flag.Parse()
 
@@ -61,6 +60,9 @@ func main() {
 	}
 	defer client.Close() //nolint:errcheck
 
+	opts := []cascade.UploadOption{cascade.WithPublic(*public)}
+	opts = append(opts, cascade.WithID("1")) // optional custom ID for action registration tracking
+
 	aid := strings.TrimSpace(*actionID)
 	if aid != "" {
 		fmt.Println("Uploading file bytes to SuperNodes for existing action...")
@@ -83,10 +85,6 @@ func main() {
 	}
 
 	fmt.Println("Uploading file...")
-	opts := []cascade.UploadOption{cascade.WithPublic(*public)}
-	if fn := strings.TrimSpace(*upFileName); fn != "" {
-		opts = append(opts, cascade.WithFileName(fn))
-	}
 	result, err := client.Cascade.Upload(ctx, address, client.Blockchain, *filePath, opts...)
 	if err != nil {
 		log.Fatalf("Upload failed: %v", err)
