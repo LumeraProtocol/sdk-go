@@ -52,8 +52,12 @@ const (
 	SupernodeUnknown                  EventType = "supernode:unknown"
 	SupernodeFinalizeSimulationFailed EventType = "supernode:finalize_simulation_failed"
 
-	SDKActionRegistrationRequested EventType = "sdk:action_registration_requested"
-	SDKActionRegistrationConfirmed EventType = "sdk:action_registration_confirmed"
+	SDKGoActionRegistrationRequested  EventType = "sdk-go:action_registration_requested"
+	SDKGoActionRegistrationConfirmed  EventType = "sdk-go:action_registration_confirmed"
+	SDKGoUploadStarted                EventType = "sdk-go:upload_started"
+	SDKGoDownloadStarted              EventType = "sdk-go:download_started"
+	SDKGoDownloadCompleted            EventType = "sdk-go:download_completed"
+	SDKGoDownloadSignatureGenerated   EventType = "sdk-go:download_signature_generated"
 )
 
 // EventDataKey identifies metadata entries.

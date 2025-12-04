@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"strings"
 
 	"github.com/LumeraProtocol/lumera/x/lumeraid/securekeyx"
 	snsdk "github.com/LumeraProtocol/supernode/v2/sdk/action"
@@ -89,12 +90,8 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) isLocalEventType(t sdkEvent.EventType) bool {
-	switch t {
-	case sdkEvent.SDKActionRegistrationRequested, sdkEvent.SDKActionRegistrationConfirmed:
-		return true
-	default:
-		return false
-	}
+	// EventType format: type:subtype
+	return strings.HasPrefix(string(t), "sdk-go:")
 }
 
 func (c *Client) addLocalSubscriber(t sdkEvent.EventType, handler sdkEvent.Handler) {
