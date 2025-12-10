@@ -3,9 +3,9 @@ package cascade
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
-	"strings"
 
 	"github.com/LumeraProtocol/lumera/x/lumeraid/securekeyx"
 	snsdk "github.com/LumeraProtocol/supernode/v2/sdk/action"
@@ -62,7 +62,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring) (*Client, error) {
 	// Create SuperNode client (pass nil for logger to use default)
 	snClient, err := snsdk.NewClient(ctx, sdkConfig, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create supernode client: %w", err)
+		return nil, fmt.Errorf("failed to create supernode client (grpc=%s, chain_id=%s): %w", cfg.GRPCAddr, cfg.ChainID, err)
 	}
 
 	// Create a task manager

@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	signingtypes "github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
 	waittx "github.com/LumeraProtocol/sdk-go/internal/wait-tx"
@@ -182,7 +185,44 @@ func (c *Client) WaitForTxInclusion(ctx context.Context, txHash string) (*txtype
 		return nil, err
 	}
 
-	return c.GetTx(ctx, txHash)
+	backoff := waittx.NewBackoff(c.config.WaitTx)
+	attempt := 0
+	maxTries := c.config.WaitTx.PollMaxRetries
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		resp, err := c.GetTx(ctx, txHash)
+		if err == nil {
+			return resp, nil
+		}
+
+		if status.Code(err) != codes.NotFound {
+			return nil, err
+		}
+
+		attempt++
+		if maxTries > 0 && attempt >= maxTries {
+			return nil, fmt.Errorf("get tx polling exhausted after %d attempts: %w", attempt, err)
+		}
+
+		delay := backoff.Next(attempt)
+		if delay <= 0 {
+			continue
+		}
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 type txQuerierFunc func(ctx context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error)
