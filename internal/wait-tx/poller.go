@@ -34,6 +34,11 @@ func (b *exponentialBackoff) Next(attempt int) time.Duration {
 	if attempt < 1 {
 		attempt = 1
 	}
+
+	// Cap values before converting to time.Duration to avoid overflow.
+	const safetyMargin = 2048.0
+	maxDurationFloat := float64(math.MaxInt64) - safetyMargin
+
 	initial := b.initial
 	if initial <= 0 {
 		initial = 500 * time.Millisecond
@@ -47,11 +52,20 @@ func (b *exponentialBackoff) Next(attempt int) time.Duration {
 	if multiplier > 1 {
 		base *= math.Pow(multiplier, float64(attempt-1))
 	}
-	if maxDelay > 0 && base > float64(maxDelay) {
-		base = float64(maxDelay)
+	if maxDelay > 0 {
+		maxCap := float64(maxDelay)
+		if maxCap > maxDurationFloat {
+			maxCap = maxDurationFloat
+		}
+		if base > maxCap {
+			base = maxCap
+		}
 	}
-	if base > math.MaxInt64 {
-		base = math.MaxInt64
+	if base > maxDurationFloat {
+		base = maxDurationFloat
+	}
+	if base < 0 {
+		base = 0
 	}
 	delay := time.Duration(base)
 	jitter := b.jitter
@@ -71,8 +85,11 @@ func (b *exponentialBackoff) Next(attempt int) time.Duration {
 			factor = 0
 		}
 		floatDelay := float64(delay) * factor
-		if floatDelay > math.MaxInt64 {
-			floatDelay = math.MaxInt64
+		if floatDelay > maxDurationFloat {
+			floatDelay = maxDurationFloat
+		}
+		if floatDelay < 0 {
+			floatDelay = 0
 		}
 		delay = time.Duration(floatDelay)
 	}
