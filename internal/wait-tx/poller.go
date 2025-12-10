@@ -83,6 +83,15 @@ func (b *exponentialBackoff) Next(attempt int) time.Duration {
 }
 
 func newPoller(q Querier, cfg clientconfig.WaitTxConfig) *poller {
+	return &poller{
+		querier:  q,
+		backoff:  NewBackoff(cfg),
+		maxTries: cfg.PollMaxRetries,
+	}
+}
+
+// NewBackoff constructs a poller backoff from the WaitTx configuration.
+func NewBackoff(cfg clientconfig.WaitTxConfig) Backoff {
 	interval := cfg.PollInterval
 	if interval <= 0 {
 		interval = 500 * time.Millisecond
@@ -96,11 +105,7 @@ func newPoller(q Querier, cfg clientconfig.WaitTxConfig) *poller {
 			jitter:     cfg.PollBackoffJitter,
 		}
 	}
-	return &poller{
-		querier:  q,
-		backoff:  backoff,
-		maxTries: cfg.PollMaxRetries,
-	}
+	return backoff
 }
 
 func (p *poller) Wait(ctx context.Context, txHash string) (Result, error) {

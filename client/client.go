@@ -50,19 +50,18 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 	}
 
 	// Initialize cascade client (wraps SuperNode SDK)
-	cascadeClient, err := cascade.New(ctx, cascade.Config{
+	cascadeClient, cascadeErr := cascade.New(ctx, cascade.Config{
 		ChainID:  cfg.ChainID,
 		GRPCAddr: cfg.GRPCEndpoint,
 		Address:  cfg.Address,
 		KeyName:  cfg.KeyName,
 		Timeout:  cfg.StorageTimeout,
 	}, kr)
-	if err != nil {
-		err = blockchainClient.Close()
-		if err != nil {
-			return nil, fmt.Errorf("cascade init failed: %v; also failed to close blockchain client: %w", err, err)
+	if cascadeErr != nil {
+		if closeErr := blockchainClient.Close(); closeErr != nil {
+			return nil, fmt.Errorf("failed to initialize cascade client: %w; also failed to close blockchain client: %v", cascadeErr, closeErr)
 		}
-		return nil, fmt.Errorf("failed to initialize cascade client: %w", err)
+		return nil, fmt.Errorf("failed to initialize cascade client: %w", cascadeErr)
 	}
 	cascadeClient.SetLogger(cfg.Logger)
 
