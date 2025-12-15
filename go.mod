@@ -8,7 +8,7 @@ replace (
 
 // Local development - uncomment these for local testing
 // Comment these lines before releasing
-// 	github.com/LumeraProtocol/lumera => ../lumera
+// github.com/LumeraProtocol/lumera => ../lumera
 //  github.com/LumeraProtocol/supernode/v2 => ../supernode
 )
 
@@ -16,7 +16,7 @@ require (
 	cosmossdk.io/api v0.9.2
 
 	// Lumera blockchain types (generated proto)
-	github.com/LumeraProtocol/lumera v1.8.5
+	github.com/LumeraProtocol/lumera v1.8.6-rc2
 
 	// SuperNode SDK for storage operations
 	github.com/LumeraProtocol/supernode/v2 v2.4.10

@@ -51,6 +51,10 @@ func CreateRequestActionMessage(_ context.Context, creator string, filePath stri
     }
 
     // Construct the action message (no price/expiration in offline example)
-    msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), "", "0")
+    fileSizeKbs := int64(0)
+    if fi.Size() > 0 {
+        fileSizeKbs = (fi.Size() + 1023) / 1024
+    }
+    msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), "", "0", fileSizeKbs)
     return msg, metaBytes, nil
 }

@@ -21,9 +21,14 @@ func NewMsgRequestAction(
 	metadata string,
 	price string,
 	expiration string,
+	fileSizeKbs int64,
 ) *actiontypes.MsgRequestAction {
 	// Convert ActionType enum to string
 	actionTypeStr := actionType.String()
+	fileSizeKbsStr := ""
+	if fileSizeKbs != 0 {
+		fileSizeKbsStr = strconv.FormatInt(fileSizeKbs, 10)
+	}
 
 	return &actiontypes.MsgRequestAction{
 		Creator:        creator,
@@ -31,6 +36,7 @@ func NewMsgRequestAction(
 		Metadata:       metadata,
 		Price:          price,
 		ExpirationTime: expiration,
+		FileSizeKbs:    fileSizeKbsStr,
 	}
 }
 
@@ -245,8 +251,8 @@ func (a *ActionClient) QueryActionByMetadata(ctx context.Context, actionTypeStr,
 // -------- Transaction Helpers --------
 
 // RequestActionTx builds, signs, broadcasts and confirms a MsgRequestAction.
-func (c *Client) RequestActionTx(ctx context.Context, creator string, actionType actiontypes.ActionType, metadata, price, expiration, memo string) (*types.ActionResult, error) {
-	msg := NewMsgRequestAction(creator, actionType, metadata, price, expiration)
+func (c *Client) RequestActionTx(ctx context.Context, creator string, actionType actiontypes.ActionType, metadata, price, expiration string, fileSizeKbs int64, memo string) (*types.ActionResult, error) {
+	msg := NewMsgRequestAction(creator, actionType, metadata, price, expiration, fileSizeKbs)
 
 	txBytes, err := c.BuildAndSignTx(ctx, msg, memo)
 	if err != nil {

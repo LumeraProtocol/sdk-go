@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 	"path/filepath"
 
@@ -55,7 +57,15 @@ func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string,
 	c.logf("cascade: built metadata for %s (public=%t price=%s expires=%s)", filePath, isPublic, price, expiration)
 
 	// Construct the action message
-	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration)
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("stat file: %w", err)
+	}
+	fileSizeKbs := int64(0)
+	if fi != nil && fi.Size() > 0 {
+		fileSizeKbs = (fi.Size() + 1023) / 1024
+	}
+	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration, fileSizeKbs)
 	return msg, metaBytes, nil
 }
 
@@ -92,7 +102,14 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 	})
 
 	c.logf("cascade: submitting request action tx creator=%s memo=%s price=%s expires=%s", msg.Creator, memo, msg.Price, msg.ExpirationTime)
-	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, memo)
+	fileSizeKbs := int64(0)
+	if msg.FileSizeKbs != "" {
+		// Msg already validated in chain; best-effort parse here.
+		if parsed, err := strconv.ParseInt(msg.FileSizeKbs, 10, 64); err == nil {
+			fileSizeKbs = parsed
+		}
+	}
+	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, fileSizeKbs, memo)
 	if err != nil {
 		return nil, err
 	}
