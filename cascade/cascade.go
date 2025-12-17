@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
+	"os"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
@@ -36,6 +38,7 @@ func WithID(id string) UploadOption {
 		o.ID = id
 	}
 }
+
 // CreateRequestActionMessage builds Cascade metadata and constructs a MsgRequestAction without broadcasting it.
 // Returns the built Cosmos message and the serialized metadata bytes used in the message.
 func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string, filePath string, options *UploadOptions) (*actiontypes.MsgRequestAction, []byte, error) {
@@ -55,13 +58,21 @@ func (c *Client) CreateRequestActionMessage(ctx context.Context, creator string,
 	c.logf("cascade: built metadata for %s (public=%t price=%s expires=%s)", filePath, isPublic, price, expiration)
 
 	// Construct the action message
-	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration)
+	fi, err := os.Stat(filePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("stat file: %w", err)
+	}
+	fileSizeKbs := int64(0)
+	if fi.Size() > 0 {
+		fileSizeKbs = (fi.Size() + 1023) / 1024
+	}
+	msg := blockchain.NewMsgRequestAction(creator, actiontypes.ActionTypeCascade, string(metaBytes), price, expiration, fileSizeKbs)
 	return msg, metaBytes, nil
 }
 
 // SendRequestActionMessage signs, simulates and broadcasts the provided request message.
 // "memo" can be used to pass an optional filename or idempotency key.
-func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Client, msg *actiontypes.MsgRequestAction, 
+func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Client, msg *actiontypes.MsgRequestAction,
 	memo string, options *UploadOptions) (*types.ActionResult, error) {
 	if bc == nil || msg == nil {
 		return nil, fmt.Errorf("blockchain client and msg are required")
@@ -82,7 +93,7 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 	c.emitClientEvent(ctx, sdkEvent.Event{
 		Type:      sdkEvent.SDKGoActionRegistrationRequested,
 		TaskType:  taskType,
-		TaskID: id,
+		TaskID:    id,
 		Timestamp: time.Now(),
 		Data: sdkEvent.EventData{
 			sdkEvent.KeyPrice:      msg.Price,
@@ -92,7 +103,14 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 	})
 
 	c.logf("cascade: submitting request action tx creator=%s memo=%s price=%s expires=%s", msg.Creator, memo, msg.Price, msg.ExpirationTime)
-	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, memo)
+	fileSizeKbs := int64(0)
+	if msg.FileSizeKbs != "" {
+		// Msg already validated in chain; best-effort parse here.
+		if parsed, err := strconv.ParseInt(msg.FileSizeKbs, 10, 64); err == nil {
+			fileSizeKbs = parsed
+		}
+	}
+	ar, err := bc.RequestActionTx(ctx, msg.Creator, at, msg.Metadata, msg.Price, msg.ExpirationTime, fileSizeKbs, memo)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +125,7 @@ func (c *Client) SendRequestActionMessage(ctx context.Context, bc *blockchain.Cl
 		Data: sdkEvent.EventData{
 			sdkEvent.KeyTxHash:      ar.TxHash,
 			sdkEvent.KeyBlockHeight: ar.Height,
-			sdkEvent.KeyMessage:    "Action registration confirmed",
+			sdkEvent.KeyMessage:     "Action registration confirmed",
 		},
 	})
 	c.logf("cascade: request action confirmed action_id=%s height=%d tx=%s", actionID, ar.Height, ar.TxHash)
@@ -152,9 +170,9 @@ func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePat
 	}
 	// emit upload started event
 	c.emitClientEvent(ctx, sdkEvent.Event{
-		Type:      sdkEvent.SDKGoUploadStarted,
-		ActionID:  actionID,
-		TaskID:    taskID,
+		Type:     sdkEvent.SDKGoUploadStarted,
+		ActionID: actionID,
+		TaskID:   taskID,
 		Data: sdkEvent.EventData{
 			sdkEvent.KeyMessage: "Cascade upload task started",
 		},
@@ -171,9 +189,9 @@ func (c *Client) UploadToSupernode(ctx context.Context, actionID string, filePat
 }
 
 // Upload provides a one-shot convenience helper that performs:
-//   1) CreateRequestActionMessage
-//   2) SendRequestActionMessage
-//   3) UploadToSupernode
+//  1. CreateRequestActionMessage
+//  2. SendRequestActionMessage
+//  3. UploadToSupernode
 func (c *Client) Upload(ctx context.Context, creator string, bc *blockchain.Client, filePath string, opts ...UploadOption) (*types.CascadeResult, error) {
 
 	// Apply upload options
@@ -232,9 +250,9 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 	taskType := string(types.ActionTypeCascade)
 	c.logf("cascade: starting download, action=%s dest=%s", actionID, outputDir)
 	c.emitClientEvent(ctx, sdkEvent.Event{
-		Type:      sdkEvent.SDKGoDownloadStarted,
-		ActionID:  actionID,
-		TaskType:  taskType,
+		Type:     sdkEvent.SDKGoDownloadStarted,
+		ActionID: actionID,
+		TaskType: taskType,
 		Data: sdkEvent.EventData{
 			sdkEvent.KeyMessage: "Cascade download task started",
 		},
@@ -249,9 +267,9 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 
 	c.logf("cascade: download signature generated, action=%s", actionID)
 	c.emitClientEvent(ctx, sdkEvent.Event{
-		Type:      sdkEvent.SDKGoDownloadSignatureGenerated,
-		ActionID:  actionID,
-		TaskType:  taskType,
+		Type:     sdkEvent.SDKGoDownloadSignatureGenerated,
+		ActionID: actionID,
+		TaskType: taskType,
 		Data: sdkEvent.EventData{
 			sdkEvent.KeyMessage: "Cascade download signature generated",
 		},
@@ -278,10 +296,10 @@ func (c *Client) Download(ctx context.Context, actionID string, outputDir string
 
 	c.logf("cascade: download completed action_id=%s task_id=%s", actionID, taskID)
 	c.emitClientEvent(ctx, sdkEvent.Event{
-		Type:      sdkEvent.SDKGoDownloadCompleted,
-		ActionID:  actionID,
-		TaskType:  taskType,
-		TaskID:    taskID,
+		Type:     sdkEvent.SDKGoDownloadCompleted,
+		ActionID: actionID,
+		TaskType: taskType,
+		TaskID:   taskID,
 		Data: sdkEvent.EventData{
 			sdkEvent.KeyMessage: "Cascade download task completed",
 		},

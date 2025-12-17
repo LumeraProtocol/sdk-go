@@ -20,6 +20,7 @@ type Action struct {
 	Price          string
 	ExpirationTime time.Time
 	BlockHeight    int64
+	FileSizeKbs    int64
 	SuperNodes     []string
 }
 
@@ -161,6 +162,7 @@ func ActionFromProto(pb *actiontypes.Action) *Action {
 		Price:          priceToString(pb.Price),
 		ExpirationTime: time.Unix(pb.ExpirationTime, 0),
 		BlockHeight:    pb.BlockHeight,
+		FileSizeKbs:    pb.FileSizeKbs,
 		SuperNodes:     pb.SuperNodes,
 	}
 }
