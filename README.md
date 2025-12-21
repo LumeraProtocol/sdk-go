@@ -73,6 +73,7 @@ func main() {
 ```
 
 Note: For Cascade file operations (SuperNode SDK + SnApi), see:
+
 - [examples/cascade-upload](examples/cascade-upload)
 - [examples/cascade-download](examples/cascade-download)
 
@@ -123,6 +124,8 @@ See the [examples](./examples) directory for complete working examples:
 
 ## Documentation
 
+- [Developer Guide & Tutorials](docs/DEVELOPER_GUIDE.md)
+- [API Overview](docs/API.md)
 - [API Documentation](https://pkg.go.dev/github.com/LumeraProtocol/sdk-go)
 - [Lumera Documentation](https://docs.lumera.io)
 
