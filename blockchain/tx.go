@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	waittx "github.com/LumeraProtocol/sdk-go/internal/wait-tx"
 )
 
@@ -56,6 +56,19 @@ func (c *Client) Broadcast(ctx context.Context, txBytes []byte, mode txtypes.Bro
 
 // BuildAndSignTx builds a transaction with one message, simulates gas, then signs it.
 func (c *Client) BuildAndSignTx(ctx context.Context, msg sdk.Msg, memo string) ([]byte, error) {
+	return c.buildAndSignTx(ctx, msg, memo, 1.3)
+}
+
+// BuildAndSignTxWithGasAdjustment builds a transaction with one message, simulates gas,
+// applies a custom adjustment factor, then signs it.
+func (c *Client) BuildAndSignTxWithGasAdjustment(ctx context.Context, msg sdk.Msg, memo string, gasAdjustment float64) ([]byte, error) {
+	if gasAdjustment <= 0 {
+		gasAdjustment = 1.3
+	}
+	return c.buildAndSignTx(ctx, msg, memo, gasAdjustment)
+}
+
+func (c *Client) buildAndSignTx(ctx context.Context, msg sdk.Msg, memo string, gasAdjustment float64) ([]byte, error) {
 	// 1) Tx config and builder
 	txCfg := sdkcrypto.NewDefaultTxConfig()
 	builder := txCfg.NewTxBuilder()
@@ -113,8 +126,8 @@ func (c *Client) BuildAndSignTx(ctx context.Context, msg sdk.Msg, memo string) (
 	gasUsed, err := c.Simulate(ctx, unsignedBytes)
 	gas := uint64(0)
 	if err == nil && gasUsed > 0 {
-		// add a 30% buffer
-		gas = uint64(float64(gasUsed) * 1.3)
+		// add an adjustable buffer
+		gas = uint64(float64(gasUsed) * gasAdjustment)
 		if gas == 0 {
 			gas = gasUsed
 		}

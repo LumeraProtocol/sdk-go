@@ -77,6 +77,147 @@ Note: For Cascade file operations (SuperNode SDK + SnApi), see:
 - [examples/cascade-upload](examples/cascade-upload)
 - [examples/cascade-download](examples/cascade-download)
 
+### ICA Cascade Flow (Upload/Download)
+
+If you need to register Cascade actions via an interchain account (ICS-27) while still using the SDK for metadata, uploads, and downloads, the high-level flow is:
+
+1. Resolve the controller-chain owner address and ensure the ICA host address is registered.
+2. Fund the ICA host address on Lumera so it can pay fees.
+3. Initialize `cascade.Client` with `ICAOwnerKeyName` and `ICAOwnerHRP` to allow controller-chain download signatures.
+4. Build and submit `MsgRequestAction` over ICA, then use the returned action ID for the supernode upload.
+5. Download with a controller-chain signer (or let the client derive it).
+6. After the action is `DONE`, send `MsgApproveAction` over ICA and wait for `APPROVED`.
+
+Minimal wiring (controller-chain submit helpers are application-specific):
+
+```go
+// setup cascade client with ICA owner config
+cascadeClient, err := cascade.New(ctx, cascade.Config{
+    ChainID:         lumeraChainID,
+    GRPCAddr:        lumeraGRPC,
+    Address:         lumeraAddr,  // host chain address
+    KeyName:         lumeraKeyName,
+    ICAOwnerKeyName: simdKeyName, // controller chain key name
+    ICAOwnerHRP:     "cosmos",    // controller chain address HRP
+    Timeout:         30 * time.Second,
+}, kr)
+
+// send function submits ICA MsgRequestAction and returns action id
+sendFunc := func(ctx context.Context, msg *actiontypes.MsgRequestAction, _ []byte, _ string, _ *cascade.UploadOptions) (*types.ActionResult, error) {
+    actionIDs, err := sendICARequestTx(ctx, []*actiontypes.MsgRequestAction{msg})
+    if err != nil {
+        return nil, err
+    }
+    return &types.ActionResult{ActionID: actionIDs[0]}, nil
+}
+
+res, err := cascadeClient.Upload(ctx, icaAddr, nil, filePath,
+    cascade.WithICACreatorAddress(icaAddr),
+    cascade.WithAppPubkey(simdPubkey),
+    cascade.WithICASendFunc(sendFunc),
+)
+
+// download using controller address for signature (optional override)
+_, err = cascadeClient.Download(ctx, res.ActionID, downloadDir, cascade.WithDownloadSignerAddress(ownerAddr))
+
+// approve via ICA when action is DONE
+approveMsg, _ := cascade.CreateApproveActionMessage(ctx, res.ActionID, cascade.WithApproveCreator(icaAddr))
+_ = sendICAApproveTx(ctx, []*actiontypes.MsgApproveAction{approveMsg})
+```
+
+Notes:
+- `WithICASendFunc` is required when using `WithICACreatorAddress` and/or `WithAppPubkey`.
+- Some chains enforce `app_pubkey` for ICA creators; set it to the controller-chain key pubkey.
+- The full end-to-end test lives in `../lumera/devnet/tests/hermes/ibc_hermes_ica_test.go` (`TestICACascadeFlow`).
+- Devnet test link: [lumera/devnet/tests/hermes/ibc_hermes_ica_test.go](https://github.com/LumeraProtocol/lumera/blob/main/devnet/tests/hermes/ibc_hermes_ica_test.go)
+
+#### Sending ICA RequestAction (helpers + CLI)
+
+The SDK includes small helpers to assemble ICS-27 packets and decode acknowledgements:
+
+- `PackRequestForICA`: packs `MsgRequestAction` into `google.protobuf.Any` bytes.
+- `BuildICAPacketData`: wraps one or more Any messages into `InterchainAccountPacketData` for `EXECUTE_TX`.
+- `BuildMsgSendTx`: builds controller-side `MsgSendTx` if you submit the tx programmatically.
+- `ExtractRequestActionIDsFromAck` / `ExtractRequestActionIDsFromTxMsgData`: pull action IDs out of acknowledgements.
+- `ParseTxHashJSON`, `ExtractPacketInfoFromTxJSON`, `DecodePacketAcknowledgementJSON`: CLI-friendly helpers for tx hash, packet info, and ack decoding.
+
+Build a packet JSON file (used by the CLI) from a `MsgRequestAction`:
+
+```go
+msg, _, _ := cascadeClient.CreateRequestActionMessage(ctx, icaAddr, filePath, &cascade.UploadOptions{
+    ICACreatorAddress: icaAddr,
+    AppPubkey:         simdPubkey,
+})
+
+anyBz, _ := cascade.PackRequestForICA(msg)
+var any codectypes.Any
+_ = gogoproto.Unmarshal(anyBz, &any)
+
+packet, _ := cascade.BuildICAPacketData([]*codectypes.Any{&any})
+packetJSON, _ := codec.NewProtoCodec(codectypes.NewInterfaceRegistry()).MarshalJSON(&packet)
+_ = os.WriteFile("ica-packet.json", packetJSON, 0o600)
+```
+
+Send the packet on the controller chain (example `simd` CLI):
+
+```bash
+simd tx interchain-accounts controller send-tx <connection-id> ica-packet.json \
+  --from <controller-key> \
+  --chain-id <controller-chain-id> \
+  --gas auto \
+  --gas-adjustment 1.3 \
+  --broadcast-mode sync \
+  --output json \
+  --yes
+```
+
+Once you have the IBC acknowledgement bytes (from relayer output or packet-ack query), decode action IDs:
+
+```go
+ids, err := cascade.ExtractRequestActionIDsFromAck(ackBytes)
+```
+
+If you already have `sdk.TxMsgData` (for example, from an ack you decoded yourself), use:
+
+```go
+ids := cascade.ExtractRequestActionIDsFromTxMsgData(msgData)
+```
+
+Packet/ack CLI helpers (controller chain):
+
+```bash
+# tx response -> packet identifiers
+simd q tx <tx-hash> --output json
+# packet ack query uses port/channel/sequence from send_packet event
+simd q ibc channel packet-ack <port> <channel> <sequence> --output json
+```
+
+```go
+txHash, _ := cascade.ParseTxHashJSON(txJSON)
+packetInfo, _ := cascade.ExtractPacketInfoFromTxJSON(txQueryJSON)
+ackBytes, _ := cascade.DecodePacketAcknowledgementJSON(ackQueryJSON)
+ids, _ := cascade.ExtractRequestActionIDsFromAck(ackBytes)
+_ = txHash
+_ = packetInfo
+```
+
+### Crypto Helpers (pkg/crypto)
+
+Common helpers:
+
+- `DefaultKeyringParams` / `NewKeyring` for consistent keyring setup.
+- `LoadKeyringFromMnemonic` / `ImportKeyFromMnemonic` for mnemonic-based flows.
+- `AddressFromKey` to derive HRP-specific addresses without mutating global config.
+- `NewDefaultTxConfig` and `SignTxWithKeyring` for signing with Cosmos SDK builders.
+
+```go
+import sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
+
+kr, _ := sdkcrypto.NewKeyring(sdkcrypto.DefaultKeyringParams())
+addr, _ := sdkcrypto.AddressFromKey(kr, "alice", "lumera")
+_ = addr
+```
+
 ### Multi-Account Usage
 
 Reuse the same configuration and transports for multiple local accounts via the client factory:
@@ -87,7 +228,7 @@ import (
 
     "github.com/cosmos/cosmos-sdk/crypto/keyring"
     lumerasdk "github.com/LumeraProtocol/sdk-go/client"
-    sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
+    sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 )
 
 kr, _ := keyring.New("lumera", "os", "~/.lumera", nil)

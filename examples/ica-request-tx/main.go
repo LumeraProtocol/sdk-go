@@ -12,9 +12,8 @@ import (
 	"strings"
 
 	"github.com/LumeraProtocol/sdk-go/cascade"
-	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	gogoproto "github.com/cosmos/gogoproto/proto"
 	controllertypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/controller/types"
 )
 
@@ -27,6 +26,7 @@ func main() {
 	keyringDir := flag.String("keyring-dir", "~/.lumera", "Keyring base directory (actual dir appends keyring-<backend> for file/test)")
 	keyName := flag.String("key-name", "my-key", "Key name in the keyring")
 	ownerHRP := flag.String("owner-hrp", "inj", "Bech32 HRP for controller chain owner address (e.g., inj)")
+	icaAddress := flag.String("ica-address", "", "ICA address on Lumera (host chain)")
 
 	// IBC params
 	connectionID := flag.String("connection-id", "connection-0", "IBC connection ID on controller chain")
@@ -70,27 +70,49 @@ func main() {
 		os.Exit(1)
 	}
 
+	useICA := strings.TrimSpace(*icaAddress) != ""
+	var appPubkey []byte
+	if useICA {
+		rec, err := kr.Key(*keyName)
+		if err != nil {
+			fmt.Printf("load key: %v\n", err)
+			os.Exit(1)
+		}
+		pub, err := rec.GetPubKey()
+		if err != nil {
+			fmt.Printf("get pubkey: %v\n", err)
+			os.Exit(1)
+		}
+		if pub == nil {
+			fmt.Println("nil pubkey for key")
+			os.Exit(1)
+		}
+		appPubkey = pub.Bytes()
+	}
+
 	// Build one MsgRequestAction per file
 	var anys []*codectypes.Any
 	for _, f := range files {
-		msg, _, err := cascade.CreateRequestActionMessage(context.Background(), lumeraAddress, f)
+		var opts []cascade.UploadOption
+		if useICA {
+			opts = append(opts,
+				cascade.WithICACreatorAddress(*icaAddress),
+				cascade.WithAppPubkey(appPubkey),
+			)
+		}
+		msg, _, err := cascade.CreateRequestActionMessage(context.Background(), lumeraAddress, f, opts...)
 		if err != nil {
 			fmt.Printf("create request message: %v\n", err)
 			os.Exit(1)
 		}
 
-		// Pack to Any bytes and unmarshal back to Any struct
-		anyBytes, err := cascade.PackRequestForICA(msg)
+		// Pack to Any for ICA execution
+		any, err := cascade.PackRequestAny(msg)
 		if err != nil {
-			fmt.Printf("pack request for ICA: %v\n", err)
+			fmt.Printf("pack request Any: %v\n", err)
 			os.Exit(1)
 		}
-		var any codectypes.Any
-		if err := gogoproto.Unmarshal(anyBytes, &any); err != nil {
-			fmt.Printf("unmarshal Any: %v\n", err)
-			os.Exit(1)
-		}
-		anys = append(anys, &any)
+		anys = append(anys, any)
 	}
 
 	// Build packet and MsgSendTx

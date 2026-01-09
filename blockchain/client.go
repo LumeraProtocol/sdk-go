@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
+	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 	//audittypes "github.com/LumeraProtocol/lumera/x/audit/types"
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
 	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
@@ -44,6 +44,7 @@ type Config struct {
 	Timeout        time.Duration
 	MaxRecvMsgSize int
 	MaxSendMsgSize int
+	InsecureGRPC   bool
 	WaitTx         clientconfig.WaitTxConfig
 }
 
@@ -67,9 +68,12 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 	// Ensure Lumera bech32 prefixes are configured globally
 	ensureLumeraBech32Prefixes()
 
-	// Determine if we should use TLS based on the endpoint
-	// Use TLS if: port is 443, or hostname doesn't start with "localhost"/"127.0.0.1"
+	// Determine if we should use TLS based on the endpoint.
+	// Use TLS if: port is 443, or hostname doesn't start with "localhost"/"127.0.0.1".
 	useTLS := shouldUseTLS(cfg.GRPCAddr)
+	if cfg.InsecureGRPC {
+		useTLS = false
+	}
 
 	var creds credentials.TransportCredentials
 	if useTLS {

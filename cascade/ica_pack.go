@@ -34,6 +34,19 @@ func PackRequestForICA(msg *actiontypes.MsgRequestAction) ([]byte, error) {
 	return out, nil
 }
 
+// PackRequestAny wraps PackRequestForICA and returns the decoded Any.
+func PackRequestAny(msg *actiontypes.MsgRequestAction) (*codectypes.Any, error) {
+	anyBytes, err := PackRequestForICA(msg)
+	if err != nil {
+		return nil, err
+	}
+	var any codectypes.Any
+	if err := gogoproto.Unmarshal(anyBytes, &any); err != nil {
+		return nil, fmt.Errorf("unmarshal Any: %w", err)
+	}
+	return &any, nil
+}
+
 // PackApproveForICA packs a Lumera MsgApproveAction into protobuf Any bytes suitable for ICS-27 MsgSendTx.
 func PackApproveForICA(msg *actiontypes.MsgApproveAction) ([]byte, error) {
 	if msg == nil {
@@ -52,6 +65,19 @@ func PackApproveForICA(msg *actiontypes.MsgApproveAction) ([]byte, error) {
 		return nil, fmt.Errorf("marshal Any: %w", err)
 	}
 	return out, nil
+}
+
+// PackApproveAny wraps PackApproveForICA and returns the decoded Any.
+func PackApproveAny(msg *actiontypes.MsgApproveAction) (*codectypes.Any, error) {
+	anyBytes, err := PackApproveForICA(msg)
+	if err != nil {
+		return nil, err
+	}
+	var any codectypes.Any
+	if err := gogoproto.Unmarshal(anyBytes, &any); err != nil {
+		return nil, fmt.Errorf("unmarshal Any: %w", err)
+	}
+	return &any, nil
 }
 
 // BuildICAPacketData builds InterchainAccountPacketData for EXECUTE_TX with provided Any messages.

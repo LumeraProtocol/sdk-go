@@ -7,7 +7,7 @@ import (
 	"log"
 
 	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
-	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 )
 
 func main() {
