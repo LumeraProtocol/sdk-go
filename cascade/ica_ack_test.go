@@ -26,13 +26,13 @@ func TestExtractRequestActionIDsFromTxMsgData(t *testing.T) {
 	ids := ExtractRequestActionIDsFromTxMsgData(msgData)
 	require.Equal(t, []string{"action-1"}, ids)
 
-	data := &sdk.MsgData{
-		MsgType: "/lumera.action.v1.MsgRequestAction",
-		Data:    respBz,
+	other := &codectypes.Any{
+		TypeUrl: "/cosmos.bank.v1beta1.MsgSendResponse",
+		Value:   []byte("noop"),
 	}
-	msgData = &sdk.TxMsgData{Data: []*sdk.MsgData{data}}
+	msgData = &sdk.TxMsgData{MsgResponses: []*codectypes.Any{other}}
 	ids = ExtractRequestActionIDsFromTxMsgData(msgData)
-	require.Equal(t, []string{"action-1"}, ids)
+	require.Empty(t, ids)
 }
 
 func TestExtractRequestActionIDsFromAck(t *testing.T) {
