@@ -22,7 +22,11 @@ type Config struct {
 	GRPCAddr string
 	Address  string
 	KeyName  string
-	Timeout  time.Duration
+	// ICAOwnerKeyName is the local key name for the ICA controller owner.
+	ICAOwnerKeyName string
+	// ICAOwnerHRP is the bech32 prefix for the ICA controller owner chain.
+	ICAOwnerHRP string
+	Timeout     time.Duration
 }
 
 // Client provides access to cascade operations (wraps SuperNode SDK)
@@ -32,6 +36,7 @@ type Client struct {
 	config   Config
 	keyring  keyring.Keyring
 	logger   sdklog.Logger
+	snLogger *supernodeLogger
 
 	subMu        sync.RWMutex
 	localSubs    map[sdkEvent.EventType][]sdkEvent.Handler
@@ -42,9 +47,11 @@ type Client struct {
 func New(ctx context.Context, cfg Config, kr keyring.Keyring) (*Client, error) {
 	// Create SuperNode SDK config
 	accountCfg := snconfig.AccountConfig{
-		KeyName:  cfg.KeyName,
-		Keyring:  kr,
-		PeerType: securekeyx.Simplenode,
+		KeyName:         cfg.KeyName,
+		Keyring:         kr,
+		PeerType:        securekeyx.Simplenode,
+		ICAOwnerKeyName: cfg.ICAOwnerKeyName,
+		ICAOwnerHRP:     cfg.ICAOwnerHRP,
 	}
 
 	lumeraCfg := snconfig.LumeraConfig{
@@ -60,7 +67,8 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring) (*Client, error) {
 	}
 
 	// Create SuperNode client (pass nil for logger to use default)
-	snClient, err := snsdk.NewClient(ctx, sdkConfig, nil)
+	snLogger := newSupernodeLogger(nil)
+	snClient, err := snsdk.NewClient(ctx, sdkConfig, snLogger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create supernode client (grpc=%s, chain_id=%s): %w", cfg.GRPCAddr, cfg.ChainID, err)
 	}
@@ -73,6 +81,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring) (*Client, error) {
 		tasks:     taskMgr,
 		config:    cfg,
 		keyring:   kr,
+		snLogger:  snLogger,
 		localSubs: make(map[sdkEvent.EventType][]sdkEvent.Handler),
 	}, nil
 }
@@ -80,6 +89,9 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring) (*Client, error) {
 // SetLogger configures optional diagnostics logging.
 func (c *Client) SetLogger(logger sdklog.Logger) {
 	c.logger = logger
+	if c.snLogger != nil {
+		c.snLogger.SetLogger(logger)
+	}
 }
 
 // Close closes the cascade client

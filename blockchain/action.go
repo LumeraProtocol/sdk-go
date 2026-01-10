@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
@@ -95,6 +96,36 @@ func (a *ActionClient) GetAction(ctx context.Context, actionID string) (*types.A
 	return types.ActionFromProto(resp.Action), nil
 }
 
+// WaitForState polls action state until it matches the target or the context is done.
+// A pollInterval <= 0 uses a 1s default.
+func (a *ActionClient) WaitForState(ctx context.Context, actionID string, state types.ActionState, pollInterval time.Duration) (*types.Action, error) {
+	if actionID == "" {
+		return nil, fmt.Errorf("action id is required")
+	}
+	if pollInterval <= 0 {
+		pollInterval = time.Second
+	}
+
+	var lastErr error
+	for {
+		action, err := a.GetAction(ctx, actionID)
+		if err != nil {
+			lastErr = err
+		} else if action != nil && action.State == state {
+			return action, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			if lastErr != nil {
+				return nil, fmt.Errorf("wait for action %s state %s: %w (last error: %v)", actionID, state, ctx.Err(), lastErr)
+			}
+			return nil, fmt.Errorf("wait for action %s state %s: %w", actionID, state, ctx.Err())
+		case <-time.After(pollInterval):
+		}
+	}
+}
+
 // ListActions lists actions with optional filters
 func (a *ActionClient) ListActions(ctx context.Context, opts ...QueryOption) ([]*types.Action, error) {
 	req := &actiontypes.QueryListActionsRequest{}
@@ -130,8 +161,7 @@ func (a *ActionClient) GetActionFee(ctx context.Context, dataSize int64) (string
 	return resp.Amount, nil
 }
 
-
- // ListActionsByType provides a convenience wrapper accepting actionType as a string with pagination.
+// ListActionsByType provides a convenience wrapper accepting actionType as a string with pagination.
 func (a *ActionClient) ListActionsByType(ctx context.Context, actionType string, limit, offset uint64) ([]*types.Action, error) {
 	return a.ListActions(ctx,
 		WithActionTypeStr(actionType),

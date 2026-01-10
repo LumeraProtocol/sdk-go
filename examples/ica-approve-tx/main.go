@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/LumeraProtocol/sdk-go/cascade"
-	sdkcrypto "github.com/LumeraProtocol/sdk-go/internal/crypto"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	gogoproto "github.com/cosmos/gogoproto/proto"
 )
@@ -66,17 +66,12 @@ func main() {
 			os.Exit(1)
 		}
 
-		anyBytes, err := cascade.PackApproveForICA(msg)
+		any, err := cascade.PackApproveAny(msg)
 		if err != nil {
-			fmt.Printf("pack approve for ICA: %v\n", err)
+			fmt.Printf("pack approve Any: %v\n", err)
 			os.Exit(1)
 		}
-		var any codectypes.Any
-		if err := gogoproto.Unmarshal(anyBytes, &any); err != nil {
-			fmt.Printf("unmarshal Any: %v\n", err)
-			os.Exit(1)
-		}
-		anys = append(anys, &any)
+		anys = append(anys, any)
 	}
 
 	packet, err := cascade.BuildICAPacketData(anys)

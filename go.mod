@@ -1,25 +1,27 @@
 module github.com/LumeraProtocol/sdk-go
 
-go 1.25.1
+go 1.25.5
 
 // Pin compatible versions to prevent go mod tidy from updating
 replace (
 	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.14
-
+	github.com/envoyproxy/protoc-gen-validate => github.com/bufbuild/protoc-gen-validate v1.3.0
+	github.com/lyft/protoc-gen-validate => github.com/envoyproxy/protoc-gen-validate v1.3.0
+	nhooyr.io/websocket => github.com/coder/websocket v1.8.7
 // Local development - uncomment these for local testing
 // Comment these lines before releasing
-// github.com/LumeraProtocol/lumera => ../lumera
-//  github.com/LumeraProtocol/supernode/v2 => ../supernode
+//github.com/LumeraProtocol/lumera => ../lumera
+//github.com/LumeraProtocol/supernode/v2 => ../supernode
 )
 
 require (
 	cosmossdk.io/api v0.9.2
 
 	// Lumera blockchain types (generated proto)
-	github.com/LumeraProtocol/lumera v1.9.0
+	github.com/LumeraProtocol/lumera v1.9.1
 
 	// SuperNode SDK for storage operations
-	github.com/LumeraProtocol/supernode/v2 v2.4.10
+	github.com/LumeraProtocol/supernode/v2 v2.4.19
 	github.com/cometbft/cometbft v0.38.18
 	github.com/cosmos/cosmos-sdk v0.53.0
 
@@ -33,6 +35,8 @@ require (
 	// Utilities
 	lukechampine.com/blake3 v1.4.1
 )
+
+require github.com/stretchr/testify v1.11.1
 
 require (
 	cosmossdk.io/collections v1.3.0 // indirect
@@ -160,7 +164,6 @@ require (
 	github.com/spf13/cobra v1.10.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d // indirect
 	github.com/tendermint/go-amino v0.16.0 // indirect
