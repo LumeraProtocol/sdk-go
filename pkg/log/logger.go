@@ -11,6 +11,7 @@ type NoopLogger struct{}
 func (NoopLogger) Printf(string, ...interface{}) {}
 func (NoopLogger) Infof(string, ...interface{})  {}
 func (NoopLogger) Warnf(string, ...interface{})  {}
+func (NoopLogger) Errorf(string, ...interface{}) {}
 
 type infoLogger interface {
 	Infof(format string, v ...interface{})
@@ -18,6 +19,10 @@ type infoLogger interface {
 
 type warnLogger interface {
 	Warnf(format string, v ...interface{})
+}
+
+type errorLogger interface {
+	Errorf(format string, v ...interface{})
 }
 
 // Infof logs at info level when supported, otherwise falls back to Printf.
@@ -39,6 +44,18 @@ func Warnf(logger Logger, format string, v ...interface{}) {
 	}
 	if wl, ok := logger.(warnLogger); ok {
 		wl.Warnf(format, v...)
+		return
+	}
+	logger.Printf(format, v...)
+}
+
+// Errorf logs at error level when supported, otherwise falls back to Printf.
+func Errorf(logger Logger, format string, v ...interface{}) {
+	if logger == nil {
+		return
+	}
+	if el, ok := logger.(errorLogger); ok {
+		el.Errorf(format, v...)
 		return
 	}
 	logger.Printf(format, v...)

@@ -53,7 +53,14 @@ func (l *supernodeLogger) log(ctx context.Context, level, msg string, keysAndVal
 		stdlog.Print(line)
 		return
 	}
-	sdklog.Infof(logger, "%s", line)
+	switch level {
+	case "ERROR":
+		sdklog.Errorf(logger, "%s", line)
+	case "WARN":
+		sdklog.Warnf(logger, "%s", line)
+	default:
+		sdklog.Infof(logger, "%s", line)
+	}
 }
 
 func formatKV(keysAndValues []interface{}) string {
