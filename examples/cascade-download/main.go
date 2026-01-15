@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
+	"github.com/LumeraProtocol/sdk-go/constants"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 )
 
@@ -48,7 +49,7 @@ func main() {
 		log.Fatalf("Key %s not found in keyring", *keyName)
 	}
 
-	address, err := sdkcrypto.AddressFromKey(kr, *keyName, "lumera")
+	address, err := sdkcrypto.AddressFromKey(kr, *keyName, constants.LumeraAccountHRP)
 	if err != nil {
 		log.Fatalf("derive owner address: %v\n", err)
 	}

@@ -2,163 +2,64 @@ package blockchain
 
 import (
 	"context"
-	"fmt"
 	"strings"
-	"sync"
-	"time"
 
+	sdkmath "cosmossdk.io/math"
+	"github.com/LumeraProtocol/sdk-go/blockchain/base"
+	"github.com/LumeraProtocol/sdk-go/constants"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
-	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 	//audittypes "github.com/LumeraProtocol/lumera/x/audit/types"
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
 	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
 )
 
-var bech32Once sync.Once
+// Config mirrors the base blockchain config for Lumera-specific usage.
+type Config = base.Config
 
-// ensureLumeraBech32Prefixes ensures Lumera bech32 prefixes are set globally
-func ensureLumeraBech32Prefixes() {
-	bech32Once.Do(func() {
-		cfg := sdk.GetConfig()
-		// Only set if not already sealed with the desired prefixes
-		if cfg.GetBech32AccountAddrPrefix() != "lumera" {
-			cfg.SetBech32PrefixForAccount("lumera", "lumerapub")
-			cfg.SetBech32PrefixForValidator("lumeravaloper", "lumeravaloperpub")
-			cfg.SetBech32PrefixForConsensusNode("lumeravalcons", "lumeravalconspub")
-			cfg.Seal()
-		}
-	})
-}
-
-// Config for blockchain client
-type Config struct {
-	ChainID        string
-	GRPCAddr       string
-	RPCEndpoint    string
-	Timeout        time.Duration
-	MaxRecvMsgSize int
-	MaxSendMsgSize int
-	InsecureGRPC   bool
-	WaitTx         clientconfig.WaitTxConfig
-}
-
-// Client provides access to blockchain operations
+// Client provides access to Lumera-specific blockchain operations.
 type Client struct {
+	*base.Client
+
 	// Module-specific clients
 	Action    *ActionClient
 	SuperNode *SuperNodeClient
 	Claim     *ClaimClient
 	Audit     *AuditClient
-
-	// Internal
-	conn    *grpc.ClientConn
-	config  Config
-	keyring keyring.Keyring
-	keyName string
 }
 
-// New creates a new blockchain client
+// New creates a new Lumera blockchain client.
 func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*Client, error) {
-	// Ensure Lumera bech32 prefixes are configured globally
-	ensureLumeraBech32Prefixes()
-
-	// Determine if we should use TLS based on the endpoint.
-	// Use TLS if: port is 443, or hostname doesn't start with "localhost"/"127.0.0.1".
-	useTLS := shouldUseTLS(cfg.GRPCAddr)
-	if cfg.InsecureGRPC {
-		useTLS = false
+	if strings.TrimSpace(cfg.AccountHRP) == "" {
+		cfg.AccountHRP = constants.LumeraAccountHRP
+	}
+	if strings.TrimSpace(cfg.FeeDenom) == "" {
+		cfg.FeeDenom = "ulume"
+	}
+	if cfg.GasPrice.IsNil() || cfg.GasPrice.IsZero() {
+		cfg.GasPrice = sdkmath.LegacyNewDecWithPrec(25, 3) // 0.025
 	}
 
-	var creds credentials.TransportCredentials
-	if useTLS {
-		// Use system TLS credentials for secure connections
-		creds = credentials.NewTLS(nil)
-	} else {
-		// Use insecure credentials for local development
-		creds = insecure.NewCredentials()
-	}
-
-	// Create gRPC connection
-	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(creds),
-		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(cfg.MaxRecvMsgSize),
-			grpc.MaxCallSendMsgSize(cfg.MaxSendMsgSize),
-		),
-	}
-
-	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
-
-	conn, err := grpc.NewClient(cfg.GRPCAddr, dialOpts...)
+	baseClient, err := base.New(ctx, cfg, kr, keyName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
+		return nil, err
 	}
 
-	// Create module clients
-	actionClient := &ActionClient{
-		query: actiontypes.NewQueryClient(conn),
-	}
-
-	supernodeClient := &SuperNodeClient{
-		query: supernodetypes.NewQueryClient(conn),
-	}
-
-	claimClient := &ClaimClient{
-		query: claimtypes.NewQueryClient(conn),
-	}
-
-	auditClient := &AuditClient{
-		//query: audittypes.NewQueryClient(conn),
-	}
-
+	conn := baseClient.GRPCConn()
 	return &Client{
-		Action:    actionClient,
-		SuperNode: supernodeClient,
-		Claim:     claimClient,
-		Audit:     auditClient,
-		conn:      conn,
-		config:    cfg,
-		keyring:   kr,
-		keyName:   keyName,
+		Client: baseClient,
+		Action: &ActionClient{
+			query: actiontypes.NewQueryClient(conn),
+		},
+		SuperNode: &SuperNodeClient{
+			query: supernodetypes.NewQueryClient(conn),
+		},
+		Claim: &ClaimClient{
+			query: claimtypes.NewQueryClient(conn),
+		},
+		Audit: &AuditClient{
+			//query: audittypes.NewQueryClient(conn),
+		},
 	}, nil
-}
-
-// shouldUseTLS determines if TLS should be used based on the gRPC address
-func shouldUseTLS(addr string) bool {
-	// Check for explicit port 443 (standard HTTPS/gRPC-TLS port)
-	if strings.HasSuffix(addr, ":443") {
-		return true
-	}
-
-	// Check if it's a local address (localhost, 127.0.0.1, or no hostname)
-	if strings.HasPrefix(addr, "localhost:") ||
-		strings.HasPrefix(addr, "127.0.0.1:") ||
-		strings.HasPrefix(addr, "0.0.0.0:") ||
-		strings.HasPrefix(addr, ":") { // Just port, implies localhost
-		return false
-	}
-
-	// For any other remote address, prefer TLS by default for security
-	// This covers domain names without explicit port 443
-	if !strings.Contains(addr, "localhost") &&
-		!strings.Contains(addr, "127.0.0.1") &&
-		!strings.Contains(addr, "0.0.0.0") {
-		return true
-	}
-
-	return false
-}
-
-// Close closes the blockchain client connection
-func (c *Client) Close() error {
-	if c.conn != nil {
-		return c.conn.Close()
-	}
-	return nil
 }

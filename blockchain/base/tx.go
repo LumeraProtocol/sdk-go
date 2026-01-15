@@ -1,9 +1,9 @@
-package blockchain
+package base
 
 import (
 	"context"
 	"fmt"
-	"math"
+	"strings"
 	"time"
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
@@ -13,11 +13,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	waittx "github.com/LumeraProtocol/sdk-go/internal/wait-tx"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 )
 
-// Simulate runs a gas simulation for a provided tx bytes
+// Simulate runs a gas simulation for a provided tx bytes.
 func (c *Client) Simulate(ctx context.Context, txBytes []byte) (uint64, error) {
 	svc := txtypes.NewServiceClient(c.conn)
 	resp, err := svc.Simulate(ctx, &txtypes.SimulateRequest{
@@ -32,7 +32,7 @@ func (c *Client) Simulate(ctx context.Context, txBytes []byte) (uint64, error) {
 	return resp.GasInfo.GasUsed, nil
 }
 
-// Broadcast broadcasts a signed transaction with a chosen broadcast mode
+// Broadcast broadcasts a signed transaction with a chosen broadcast mode.
 func (c *Client) Broadcast(ctx context.Context, txBytes []byte, mode txtypes.BroadcastMode) (string, error) {
 	svc := txtypes.NewServiceClient(c.conn)
 	resp, err := svc.BroadcastTx(ctx, &txtypes.BroadcastTxRequest{
@@ -69,6 +69,22 @@ func (c *Client) BuildAndSignTxWithGasAdjustment(ctx context.Context, msg sdk.Ms
 }
 
 func (c *Client) buildAndSignTx(ctx context.Context, msg sdk.Msg, memo string, gasAdjustment float64) ([]byte, error) {
+	if c.keyring == nil {
+		return nil, fmt.Errorf("keyring is required")
+	}
+	if strings.TrimSpace(c.keyName) == "" {
+		return nil, fmt.Errorf("key name is required")
+	}
+	if strings.TrimSpace(c.config.AccountHRP) == "" {
+		return nil, fmt.Errorf("account HRP is required")
+	}
+	if strings.TrimSpace(c.config.FeeDenom) == "" {
+		return nil, fmt.Errorf("fee denom is required")
+	}
+	if c.config.GasPrice.IsNil() || c.config.GasPrice.IsZero() {
+		return nil, fmt.Errorf("gas price is required")
+	}
+
 	// 1) Tx config and builder
 	txCfg := sdkcrypto.NewDefaultTxConfig()
 	builder := txCfg.NewTxBuilder()
@@ -84,14 +100,14 @@ func (c *Client) buildAndSignTx(ctx context.Context, msg sdk.Msg, memo string, g
 	if err != nil {
 		return nil, fmt.Errorf("load key %q: %w", c.keyName, err)
 	}
-	accAddr, err := rec.GetAddress()
+	accAddr, err := sdkcrypto.AddressFromKey(c.keyring, c.keyName, c.config.AccountHRP)
 	if err != nil {
-		return nil, fmt.Errorf("get address for %q: %w", c.keyName, err)
+		return nil, fmt.Errorf("derive address for %q: %w", c.keyName, err)
 	}
 
 	authq := authtypes.NewQueryClient(c.conn)
 	acctResp, err := authq.AccountInfo(ctx, &authtypes.QueryAccountInfoRequest{
-		Address: accAddr.String(),
+		Address: accAddr,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("query account info: %w", err)
@@ -145,8 +161,8 @@ func (c *Client) buildAndSignTx(ctx context.Context, msg sdk.Msg, memo string, g
 	}
 
 	// Ensure a minimum fee to satisfy chain requirements
-	fee := int64(math.Ceil(float64(gas) / 40.0)) //the gas price is 0.025
-	minFee := sdk.NewCoins(sdk.NewInt64Coin("ulume", fee))
+	feeDec := c.config.GasPrice.MulInt64(int64(gas)).Ceil().TruncateInt()
+	minFee := sdk.NewCoins(sdk.NewCoin(c.config.FeeDenom, feeDec))
 	builder.SetFeeAmount(minFee)
 
 	// 5) Sign with real credentials, overwriting placeholder
@@ -175,6 +191,43 @@ func (c *Client) GetTx(ctx context.Context, hash string) (*txtypes.GetTxResponse
 	}
 	if resp == nil {
 		return nil, fmt.Errorf("empty get tx response")
+	}
+	return resp, nil
+}
+
+// GetTxsByEvents searches for transactions matching event filters.
+func (c *Client) GetTxsByEvents(ctx context.Context, events []string, page, limit uint64) (*txtypes.GetTxsEventResponse, error) {
+	if len(events) == 0 {
+		return nil, fmt.Errorf("events are required")
+	}
+	filtered := make([]string, 0, len(events))
+	for _, evt := range events {
+		evt = strings.TrimSpace(evt)
+		if evt != "" {
+			filtered = append(filtered, evt)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("events are required")
+	}
+	if page == 0 {
+		page = 1
+	}
+	query := strings.Join(filtered, " AND ")
+	req := &txtypes.GetTxsEventRequest{
+		Events:  append([]string(nil), filtered...),
+		Query:   query,
+		OrderBy: txtypes.OrderBy_ORDER_BY_DESC,
+	}
+	req.Page = page
+	req.Limit = limit
+	svc := txtypes.NewServiceClient(c.conn)
+	resp, err := svc.GetTxsEvent(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("get txs by events: %w", err)
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("empty get txs by events response")
 	}
 	return resp, nil
 }
@@ -260,7 +313,7 @@ func (c *Client) ExtractEventAttribute(tx *txtypes.GetTxResponse, eventType, att
 		if ev == nil {
 			continue
 		}
-		// Note: abci.Event uses GetType_() since 'type' is a reserved field name
+		// Note: abci.Event uses GetType_() since 'type' is a reserved field name.
 		if ev.GetType_() == eventType {
 			for _, attr := range ev.GetAttributes() {
 				if attr == nil {

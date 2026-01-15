@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/LumeraProtocol/sdk-go/cascade"
+	"github.com/LumeraProtocol/sdk-go/constants"
+	"github.com/LumeraProtocol/sdk-go/ica"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	gogoproto "github.com/cosmos/gogoproto/proto"
@@ -43,7 +45,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	lumeraAddr, err := sdkcrypto.AddressFromKey(kr, *keyName, "lumera")
+	lumeraAddr, err := sdkcrypto.AddressFromKey(kr, *keyName, constants.LumeraAccountHRP)
 	if err != nil {
 		fmt.Printf("derive owner address: %v\n", err)
 		os.Exit(1)
@@ -66,7 +68,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		any, err := cascade.PackApproveAny(msg)
+		any, err := ica.PackApproveAny(msg)
 		if err != nil {
 			fmt.Printf("pack approve Any: %v\n", err)
 			os.Exit(1)
@@ -74,12 +76,12 @@ func main() {
 		anys = append(anys, any)
 	}
 
-	packet, err := cascade.BuildICAPacketData(anys)
+	packet, err := ica.BuildICAPacketData(anys)
 	if err != nil {
 		fmt.Printf("build packet: %v\n", err)
 		os.Exit(1)
 	}
-	msgSendTx, err := cascade.BuildMsgSendTx(ownerAddr, *connectionID, *relTimeout, packet)
+	msgSendTx, err := ica.BuildMsgSendTx(ownerAddr, *connectionID, *relTimeout, packet)
 	if err != nil {
 		fmt.Printf("build MsgSendTx: %v\n", err)
 		os.Exit(1)

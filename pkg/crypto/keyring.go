@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/LumeraProtocol/sdk-go/constants"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -107,7 +108,7 @@ func LoadKeyringFromMnemonic(keyName, mnemonicFile string) (keyring.Keyring, []b
 		return nil, nil, "", fmt.Errorf("import key: %w", err)
 	}
 
-	addr, err := AddressFromKey(kr, keyName, "lumera")
+	addr, err := AddressFromKey(kr, keyName, constants.LumeraAccountHRP)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("derive address: %w", err)
 	}

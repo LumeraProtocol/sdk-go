@@ -16,27 +16,25 @@ replace (
 
 require (
 	cosmossdk.io/api v0.9.2
+	cosmossdk.io/math v1.5.3
 
 	// Lumera blockchain types (generated proto)
 	github.com/LumeraProtocol/lumera v1.9.1
 
 	// SuperNode SDK for storage operations
-	github.com/LumeraProtocol/supernode/v2 v2.4.19
+	github.com/LumeraProtocol/supernode/v2 v2.4.23
 	github.com/cometbft/cometbft v0.38.18
 	github.com/cosmos/cosmos-sdk v0.53.0
-
-	// Cosmos SDK dependencies
+	github.com/cosmos/go-bip39 v1.0.0
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/cosmos/ibc-go/v10 v10.3.0
+	github.com/stretchr/testify v1.11.1
+	go.uber.org/zap v1.27.0
 
 	// gRPC and networking
 	google.golang.org/grpc v1.77.0
-
-	// Utilities
 	lukechampine.com/blake3 v1.4.1
 )
-
-require github.com/stretchr/testify v1.11.1
 
 require (
 	cosmossdk.io/collections v1.3.0 // indirect
@@ -44,7 +42,6 @@ require (
 	cosmossdk.io/depinject v1.2.0 // indirect
 	cosmossdk.io/errors v1.0.2 // indirect
 	cosmossdk.io/log v1.6.0 // indirect
-	cosmossdk.io/math v1.5.3 // indirect
 	cosmossdk.io/schema v1.1.0 // indirect
 	cosmossdk.io/store v1.1.2 // indirect
 	cosmossdk.io/x/tx v0.14.0 // indirect
@@ -75,7 +72,6 @@ require (
 	github.com/cosmos/btcutil v1.0.5 // indirect
 	github.com/cosmos/cosmos-db v1.1.2 // indirect
 	github.com/cosmos/cosmos-proto v1.0.0-beta.5 // indirect
-	github.com/cosmos/go-bip39 v1.0.0 // indirect
 	github.com/cosmos/gogogateway v1.2.0 // indirect
 	github.com/cosmos/iavl v1.2.4 // indirect
 	github.com/cosmos/ics23/go v0.11.0 // indirect
@@ -175,7 +171,6 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.15.0 // indirect
 	golang.org/x/crypto v0.43.0 // indirect

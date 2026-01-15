@@ -4,7 +4,7 @@ import (
 	"time"
 
 	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
-	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
+	"go.uber.org/zap"
 )
 
 // Option is a function that modifies Config
@@ -74,8 +74,15 @@ func WithWaitTxConfig(waitCfg clientconfig.WaitTxConfig) Option {
 	}
 }
 
+// WithLogLevel sets the SDK log level.
+func WithLogLevel(level string) Option {
+	return func(c *Config) {
+		c.LogLevel = level
+	}
+}
+
 // WithLogger enables diagnostic logging using the provided logger.
-func WithLogger(logger sdklog.Logger) Option {
+func WithLogger(logger *zap.Logger) Option {
 	return func(c *Config) {
 		c.Logger = logger
 	}

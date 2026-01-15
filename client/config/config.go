@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
-	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Config holds all configuration for the Lumera client.
@@ -30,8 +32,11 @@ type Config struct {
 	// WaitTx controls transaction confirmation behaviour.
 	WaitTx WaitTxConfig
 
+	// LogLevel controls SDK logging (debug, info, warn, error). Default is error.
+	LogLevel string
+
 	// Logger is optional; when set, SDK operations emit diagnostics.
-	Logger sdklog.Logger
+	Logger *zap.Logger
 }
 
 // WaitTxConfig configures how the SDK waits for transaction inclusion.
@@ -70,6 +75,16 @@ func (c *Config) Validate() error {
 	if c.KeyName == "" {
 		return fmt.Errorf("key_name is required")
 	}
+	level := strings.ToLower(strings.TrimSpace(c.LogLevel))
+	if level == "" {
+		c.LogLevel = "error"
+	} else {
+		var parsed zapcore.Level
+		if err := parsed.Set(level); err != nil || parsed > zapcore.ErrorLevel {
+			return fmt.Errorf("log_level must be one of: debug, info, warn, error")
+		}
+		c.LogLevel = level
+	}
 
 	// Set defaults
 	if c.BlockchainTimeout == 0 {
@@ -103,6 +118,7 @@ func Default() Config {
 		MaxRetries:        3,
 		MaxRecvMsgSize:    1024 * 1024 * 50,
 		MaxSendMsgSize:    1024 * 1024 * 50,
+		LogLevel:          "error",
 		WaitTx:            DefaultWaitTxConfig(),
 	}
 }

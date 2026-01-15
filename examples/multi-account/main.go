@@ -7,6 +7,7 @@ import (
 	"log"
 
 	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
+	"github.com/LumeraProtocol/sdk-go/constants"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 )
 
@@ -44,11 +45,11 @@ func main() {
 		log.Fatalf("Failed to create client factory: %v", err)
 	}
 
-	account1Addr, err := sdkcrypto.AddressFromKey(kr, *keyName1, "lumera")
+	account1Addr, err := sdkcrypto.AddressFromKey(kr, *keyName1, constants.LumeraAccountHRP)
 	if err != nil {
 		log.Fatalf("Failed to derive account1 address (%s): %v", *keyName1, err)
 	}
-	account2Addr, err := sdkcrypto.AddressFromKey(kr, *keyName2, "lumera")
+	account2Addr, err := sdkcrypto.AddressFromKey(kr, *keyName2, constants.LumeraAccountHRP)
 	if err != nil {
 		log.Fatalf("Failed to derive account2 address (%s): %v", *keyName2, err)
 	}

@@ -7,7 +7,6 @@ import (
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
 	sdkEvent "github.com/LumeraProtocol/sdk-go/cascade/event"
-	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
 	"github.com/LumeraProtocol/sdk-go/types"
 )
 
@@ -37,7 +36,7 @@ func (c *Client) logf(format string, args ...interface{}) {
 	if c.logger == nil {
 		return
 	}
-	sdklog.Infof(c.logger, format, args...)
+	c.logger.Info(fmt.Sprintf(format, args...))
 }
 
 func normalizeTaskType(raw string) string {
