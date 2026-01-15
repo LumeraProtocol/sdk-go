@@ -6,21 +6,20 @@ This is a concise map of the exported Go surface. For full GoDoc see `pkg.go.dev
 
 - `client.New(ctx, Config, keyring, opts...) (*Client, error)` builds a unified client exposing `Blockchain` and `Cascade`.
 - `Config` (alias of `client/config.Config`): chain endpoints, address/key, timeouts, wait-tx config, message sizes, retries, optional logger.
-- Options: `WithChainID`, `WithKeyName`, `WithGRPCEndpoint`, `WithRPCEndpoint`, `WithBlockchainTimeout`, `WithStorageTimeout`, `WithMaxRetries`, `WithMaxMessageSize`, `WithWaitTxConfig`, `WithLogger`.
+- Options: `WithChainID`, `WithKeyName`, `WithGRPCEndpoint`, `WithRPCEndpoint`, `WithBlockchainTimeout`, `WithStorageTimeout`, `WithMaxRetries`, `WithMaxMessageSize`, `WithWaitTxConfig`, `WithLogLevel`, `WithLogger`.
 - `Client.Blockchain` is a `*blockchain.Client`; `Client.Cascade` is a `*cascade.Client`. `Close()` tears both down.
 - `NewFactory` captures a base config/keyring for multi-signer flows; `Factory.WithSigner` returns a per-signer `Client`.
 
 ## Package `cascade`
 
-- `Config`: `ChainID`, `GRPCAddr`, `Address`, `KeyName`, `Timeout`.
+- `Config`: `ChainID`, `GRPCAddr`, `Address`, `KeyName`, `Timeout`, `LogLevel`.
 - Upload helpers:
   - `Upload(ctx, creator, bc, filePath, opts...) (*types.CascadeResult, error)` – one-shot metadata build + request action tx + SuperNode upload.
-  - `CreateRequestActionMessage`, `SendRequestActionMessage`, `UploadToSupernode` – stepwise control; optional `UploadOption`s include `WithPublic(bool)` and `WithID(string)`.
+  - `Client.CreateRequestActionMessage`, `Client.SendRequestActionMessage`, `Client.UploadToSupernode` – stepwise control; optional `UploadOption`s include `WithPublic(bool)` and `WithID(string)`.
 - Download helper: `Download(ctx, actionID, outputDir, opts...) (*types.DownloadResult, error)`.
 - Approve helpers: client methods `CreateApproveActionMessage`/`SendApproveActionMessage` and package-level `CreateApproveActionMessage`/`SendApproveActionMessage` (use `WithApproveCreator`, `WithApproveBlockchain`, `WithApproveMemo`).
 - Event subscriptions: `SubscribeToEvents` and `SubscribeToAllEvents` bridge SuperNode SDK events; event types and metadata keys are defined in `cascade/event`.
 - Task utilities: `TaskManager` (in `cascade/task.go`) powers `UploadToSupernode`/`Download`; emits SDK-local events prefixed `sdk-go:`.
-- Offline helpers: package-level `CreateRequestActionMessage` builds minimal metadata without contacting SuperNodes (used by ICA examples).
 
 ## Package `blockchain`
 
@@ -42,4 +41,4 @@ This is a concise map of the exported Go surface. For full GoDoc see `pkg.go.dev
 
 ## Logging
 
-`pkg/log` defines the logger interface used by the SDK; pass your logger via `client.WithLogger` to capture diagnostic output from Cascade and blockchain flows.
+Logging uses `go.uber.org/zap`. Use `client.WithLogLevel` to set the default level (error by default), or pass a custom `*zap.Logger` via `client.WithLogger`.

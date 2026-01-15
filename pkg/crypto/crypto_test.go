@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cosmos/go-bip39"
+	"github.com/LumeraProtocol/sdk-go/constants"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/go-bip39"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,15 +45,15 @@ func TestAddressFromKey(t *testing.T) {
 	_, err := kr.NewAccount("alice", testMnemonic, "", sdk.FullFundraiserPath, hd.Secp256k1)
 	require.NoError(t, err)
 
-	addr, err := AddressFromKey(kr, "alice", "lumera")
+	addr, err := AddressFromKey(kr, "alice", constants.LumeraAccountHRP)
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(addr, "lumera"))
+	require.True(t, strings.HasPrefix(addr, constants.LumeraAccountHRP))
 
-	_, err = AddressFromKey(nil, "alice", "lumera")
+	_, err = AddressFromKey(nil, "alice", constants.LumeraAccountHRP)
 	require.Error(t, err)
-	_, err = AddressFromKey(kr, "", "lumera")
+	_, err = AddressFromKey(kr, "", constants.LumeraAccountHRP)
 	require.Error(t, err)
-	_, err = AddressFromKey(kr, "missing", "lumera")
+	_, err = AddressFromKey(kr, "missing", constants.LumeraAccountHRP)
 	require.Error(t, err)
 }
 
@@ -62,7 +63,7 @@ func TestLoadKeyringFromMnemonic(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, kr)
 	require.NotEmpty(t, pub)
-	require.True(t, strings.HasPrefix(addr, "lumera"))
+	require.True(t, strings.HasPrefix(addr, constants.LumeraAccountHRP))
 
 	_, err = kr.Key("alice")
 	require.NoError(t, err)

@@ -14,6 +14,7 @@ import (
 type Action struct {
 	ID             string
 	Creator        string
+	AppPubkey      []byte
 	Type           ActionType
 	State          ActionState
 	Metadata       ActionMetadata
@@ -156,6 +157,7 @@ func ActionFromProto(pb *actiontypes.Action) *Action {
 	return &Action{
 		ID:             pb.ActionID,
 		Creator:        pb.Creator,
+		AppPubkey:      append([]byte(nil), pb.AppPubkey...),
 		Type:           ActionType(pb.ActionType.String()),
 		State:          ActionState(pb.State.String()),
 		Metadata:       decodeMetadata(pb.Metadata, pb.ActionType),

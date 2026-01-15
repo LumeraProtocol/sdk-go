@@ -7,21 +7,21 @@ import (
 	"strings"
 	"sync"
 
-	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
+	"go.uber.org/zap"
 )
 
 // supernodeLogger adapts sdk-go logging to the SuperNode SDK logger interface.
 // It defaults to stdout when no sdk-go logger is configured.
 type supernodeLogger struct {
 	mu     sync.RWMutex
-	logger sdklog.Logger
+	logger *zap.Logger
 }
 
-func newSupernodeLogger(logger sdklog.Logger) *supernodeLogger {
+func newSupernodeLogger(logger *zap.Logger) *supernodeLogger {
 	return &supernodeLogger{logger: logger}
 }
 
-func (l *supernodeLogger) SetLogger(logger sdklog.Logger) {
+func (l *supernodeLogger) SetLogger(logger *zap.Logger) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.logger = logger
@@ -44,8 +44,7 @@ func (l *supernodeLogger) Error(ctx context.Context, msg string, keysAndValues .
 }
 
 func (l *supernodeLogger) log(ctx context.Context, level, msg string, keysAndValues ...interface{}) {
-	_ = ctx
-	line := fmt.Sprintf("[supernode] %s %s%s", level, msg, formatKV(keysAndValues))
+	line := fmt.Sprintf("[supernode] %s%s", msg, formatKV(keysAndValues))
 	l.mu.RLock()
 	logger := l.logger
 	l.mu.RUnlock()
@@ -55,11 +54,13 @@ func (l *supernodeLogger) log(ctx context.Context, level, msg string, keysAndVal
 	}
 	switch level {
 	case "ERROR":
-		sdklog.Errorf(logger, "%s", line)
+		logger.Error(line)
 	case "WARN":
-		sdklog.Warnf(logger, "%s", line)
+		logger.Warn(line)
+	case "DEBUG":
+		logger.Debug(line)
 	default:
-		sdklog.Infof(logger, "%s", line)
+		logger.Info(line)
 	}
 }
 

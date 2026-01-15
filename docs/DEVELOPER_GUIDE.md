@@ -24,6 +24,7 @@ go get github.com/LumeraProtocol/sdk-go
 - `MaxRecvMsgSize`, `MaxSendMsgSize`, `MaxRetries` – transport tuning.
 - `WaitTx` – controls websocket vs polling behaviour when waiting for tx inclusion (see defaults in `client/config`).
 - `Logger` – optional; when set, SDK operations emit diagnostics.
+- `LogLevel` – default logging threshold when no custom logger is supplied (default: error).
 
 You can override fields with `client.With...` option helpers when calling `client.New`.
 
@@ -41,9 +42,10 @@ cfg := client.Config{
     KeyName:      "my-key",
 }
 
-lumera, err := client.New(ctx, cfg, kr, client.WithLogger(log.Default()))
+logger := zap.NewExample()
+lumera, err := client.New(ctx, cfg, kr, client.WithLogger(logger))
 if err != nil {
-    log.Fatal(err)
+    logger.Error("client init failed", zap.Error(err))
 }
 defer lumera.Close()
 ```
@@ -88,7 +90,7 @@ if err != nil {
 log.Printf("action=%s task=%s", result.ActionID, result.TaskID)
 ```
 
-`Upload` wraps `CreateRequestActionMessage`, `SendRequestActionMessage`, and `UploadToSupernode`. For manual control, call those methods separately and reuse the returned `MsgRequestAction` or `types.ActionResult`.
+`Upload` wraps `Client.CreateRequestActionMessage`, `Client.SendRequestActionMessage`, and `Client.UploadToSupernode`. For manual control, call those methods separately and reuse the returned `MsgRequestAction` or `types.ActionResult`.
 
 ### 3) Download from Cascade
 
@@ -126,9 +128,55 @@ approve := blockchain.NewMsgApproveAction(cfg.Address, ar.ActionID)
 _, err = lumera.Cascade.SendApproveActionMessage(ctx, lumera.Blockchain, approve, "")
 ```
 
-For offline/ICA-style flows, package-level helpers `cascade.CreateRequestActionMessage` and `cascade.CreateApproveActionMessage` avoid SuperNode dependencies.
+For offline/ICA-style flows, the package-level `cascade.CreateApproveActionMessage` helper builds approvals without SuperNode dependencies.
 
-### 6) Manage SuperNodes
+### 6) Interchain Accounts (ICA) flow
+
+Use ICA when a controller chain account submits Lumera `MsgRequestAction` messages on behalf of an ICA address. The SDK helps build the request message and ICA packet, but you still broadcast the controller-chain `MsgSendTx` with your controller chain tooling.
+
+Key points:
+
+- You must provide Lumera chain `grpc` + `chain-id` so metadata (price/expiration) can be computed.
+- For ICA, set the ICA creator address and app pubkey on the request message.
+- The Cascade client uses `ICAOwnerKeyName` + `ICAOwnerHRP` to derive the controller owner address.
+  `appPubkey` should be the controller key's pubkey bytes from the keyring.
+
+```go
+ctx := context.Background()
+// Reuse kr from the client setup above.
+cascadeClient, err := cascade.New(ctx, cascade.Config{
+    ChainID:         "lumera-testnet-2",
+    GRPCAddr:        "localhost:9090",
+    Address:         "lumera1abc...",
+    KeyName:         "my-key",
+    ICAOwnerKeyName: "my-key",
+    ICAOwnerHRP:     "inj",
+}, kr)
+if err != nil { log.Fatal(err) }
+defer cascadeClient.Close()
+
+uploadOpts := &cascade.UploadOptions{}
+cascade.WithICACreatorAddress("lumera1ica...")(uploadOpts)
+cascade.WithAppPubkey(appPubkey)(uploadOpts)
+
+msg, _, err := cascadeClient.CreateRequestActionMessage(ctx, "lumera1abc...", "/path/file", uploadOpts)
+if err != nil { log.Fatal(err) }
+
+any, err := ica.PackRequestAny(msg)
+if err != nil { log.Fatal(err) }
+
+packet, err := ica.BuildICAPacketData([]*codectypes.Any{any})
+if err != nil { log.Fatal(err) }
+
+msgSendTx, err := ica.BuildMsgSendTx(ownerAddr, "connection-0", 600_000_000_000, packet)
+if err != nil { log.Fatal(err) }
+
+// Broadcast msgSendTx using your controller-chain SDK or CLI.
+```
+
+See `examples/ica-request-tx` for a full CLI that builds the ICA packet and prints the JSON.
+
+### 7) Manage SuperNodes
 
 Registration/updates use `lumera.Blockchain.SuperNode` transaction helpers:
 
@@ -143,7 +191,7 @@ Query helpers include `GetSuperNode`, `ListSuperNodes`, and `GetTopSuperNodesFor
 
 - Run tests: `make test`
 - Build samples: `make examples`
-- Execute tutorials end-to-end: `go run ./examples/cascade-upload`, `go run ./examples/cascade-download`, `go run ./examples/query-actions`, `go run ./examples/multi-account`
+- Execute tutorials end-to-end: `go run ./examples/cascade-upload`, `go run ./examples/cascade-download`, `go run ./examples/query-actions`, `go run ./examples/multi-account`, `go run ./examples/ica-request-tx --help`
 
 ## Troubleshooting
 

@@ -56,7 +56,7 @@ func main() {
         RPCEndpoint:  "http://localhost:26657",
         Address:      "lumera1abc...",
         KeyName:      "my-key",
-    }, kr, lumerasdk.WithLogger(log.Default()))
+    }, kr, lumerasdk.WithLogger(zap.NewExample()))
     if err != nil {
         log.Fatal(err)
     }
@@ -133,7 +133,7 @@ Notes:
 
 #### Sending ICA RequestAction (helpers + CLI)
 
-The SDK includes small helpers to assemble ICS-27 packets and decode acknowledgements:
+The SDK includes small helpers to assemble ICS-27 packets and decode acknowledgements in `ica`:
 
 - `PackRequestForICA`: packs `MsgRequestAction` into `google.protobuf.Any` bytes.
 - `BuildICAPacketData`: wraps one or more Any messages into `InterchainAccountPacketData` for `EXECUTE_TX`.
@@ -149,11 +149,11 @@ msg, _, _ := cascadeClient.CreateRequestActionMessage(ctx, icaAddr, filePath, &c
     AppPubkey:         simdPubkey,
 })
 
-anyBz, _ := cascade.PackRequestForICA(msg)
+anyBz, _ := ica.PackRequestForICA(msg)
 var any codectypes.Any
 _ = gogoproto.Unmarshal(anyBz, &any)
 
-packet, _ := cascade.BuildICAPacketData([]*codectypes.Any{&any})
+packet, _ := ica.BuildICAPacketData([]*codectypes.Any{&any})
 packetJSON, _ := codec.NewProtoCodec(codectypes.NewInterfaceRegistry()).MarshalJSON(&packet)
 _ = os.WriteFile("ica-packet.json", packetJSON, 0o600)
 ```
@@ -174,13 +174,13 @@ simd tx interchain-accounts controller send-tx <connection-id> ica-packet.json \
 Once you have the IBC acknowledgement bytes (from relayer output or packet-ack query), decode action IDs:
 
 ```go
-ids, err := cascade.ExtractRequestActionIDsFromAck(ackBytes)
+ids, err := ica.ExtractRequestActionIDsFromAck(ackBytes)
 ```
 
 If you already have `sdk.TxMsgData` (for example, from an ack you decoded yourself), use:
 
 ```go
-ids := cascade.ExtractRequestActionIDsFromTxMsgData(msgData)
+ids := ica.ExtractRequestActionIDsFromTxMsgData(msgData)
 ```
 
 Packet/ack CLI helpers (controller chain):
@@ -193,10 +193,10 @@ simd q ibc channel packet-ack <port> <channel> <sequence> --output json
 ```
 
 ```go
-txHash, _ := cascade.ParseTxHashJSON(txJSON)
-packetInfo, _ := cascade.ExtractPacketInfoFromTxJSON(txQueryJSON)
-ackBytes, _ := cascade.DecodePacketAcknowledgementJSON(ackQueryJSON)
-ids, _ := cascade.ExtractRequestActionIDsFromAck(ackBytes)
+txHash, _ := ica.ParseTxHashJSON(txJSON)
+packetInfo, _ := ica.ExtractPacketInfoFromTxJSON(txQueryJSON)
+ackBytes, _ := ica.DecodePacketAcknowledgementJSON(ackQueryJSON)
+ids, _ := ica.ExtractRequestActionIDsFromAck(ackBytes)
 _ = txHash
 _ = packetInfo
 ```
@@ -211,10 +211,13 @@ Common helpers:
 - `NewDefaultTxConfig` and `SignTxWithKeyring` for signing with Cosmos SDK builders.
 
 ```go
-import sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
+import (
+    "github.com/LumeraProtocol/sdk-go/constants"
+    sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
+)
 
 kr, _ := sdkcrypto.NewKeyring(sdkcrypto.DefaultKeyringParams())
-addr, _ := sdkcrypto.AddressFromKey(kr, "alice", "lumera")
+addr, _ := sdkcrypto.AddressFromKey(kr, "alice", constants.LumeraAccountHRP)
 _ = addr
 ```
 
@@ -228,6 +231,7 @@ import (
 
     "github.com/cosmos/cosmos-sdk/crypto/keyring"
     lumerasdk "github.com/LumeraProtocol/sdk-go/client"
+    "github.com/LumeraProtocol/sdk-go/constants"
     sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 )
 
@@ -238,8 +242,8 @@ factory, err := lumerasdk.NewFactory(lumerasdk.Config{
     RPCEndpoint:  "http://localhost:26657",
 }, kr)
 
-aliceAddr, _ := sdkcrypto.AddressFromKey(kr, "alice", "lumera")
-bobAddr, _ := sdkcrypto.AddressFromKey(kr, "bob", "lumera")
+aliceAddr, _ := sdkcrypto.AddressFromKey(kr, "alice", constants.LumeraAccountHRP)
+bobAddr, _ := sdkcrypto.AddressFromKey(kr, "bob", constants.LumeraAccountHRP)
 
 alice, _ := factory.WithSigner(ctx, aliceAddr, "alice")
 bob, _ := factory.WithSigner(ctx, bobAddr, "bob")

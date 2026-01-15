@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	"go.uber.org/zap"
 
 	"github.com/LumeraProtocol/sdk-go/blockchain"
 	"github.com/LumeraProtocol/sdk-go/cascade"
-	sdklog "github.com/LumeraProtocol/sdk-go/pkg/log"
 )
 
 // Client provides unified access to Lumera blockchain and storage
@@ -20,7 +20,7 @@ type Client struct {
 	// Configuration
 	config  *Config
 	keyring keyring.Keyring
-	logger  sdklog.Logger
+	logger  *zap.Logger
 }
 
 // New creates a new unified Lumera client
@@ -56,6 +56,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 		Address:  cfg.Address,
 		KeyName:  cfg.KeyName,
 		Timeout:  cfg.StorageTimeout,
+		LogLevel: cfg.LogLevel,
 	}, kr)
 	if cascadeErr != nil {
 		if closeErr := blockchainClient.Close(); closeErr != nil {
@@ -63,7 +64,9 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 		}
 		return nil, fmt.Errorf("failed to initialize cascade client: %w", cascadeErr)
 	}
-	cascadeClient.SetLogger(cfg.Logger)
+	if cfg.Logger != nil {
+		cascadeClient.SetLogger(cfg.Logger)
+	}
 
 	return &Client{
 		Blockchain: blockchainClient,

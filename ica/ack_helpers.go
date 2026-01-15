@@ -1,4 +1,4 @@
-package cascade
+package ica
 
 import (
 	"encoding/base64"
@@ -80,8 +80,8 @@ func ExtractPacketInfoFromTxJSON(txJSON []byte) (PacketInfo, error) {
 		}
 		attr := make(map[string]string)
 		for _, a := range evt.Attributes {
-			key := decodeEventValue(a.Key)
-			val := decodeEventValue(a.Value)
+			key := decodeEventValueBase64(a.Key)
+			val := decodeEventValueBase64(a.Value)
 			if key != "" {
 				attr[key] = val
 			}
@@ -120,7 +120,7 @@ func DecodePacketAcknowledgementJSON(ackJSON []byte) ([]byte, error) {
 	return ackBytes, nil
 }
 
-func decodeEventValue(raw string) string {
+func decodeEventValueBase64(raw string) string {
 	if raw == "" {
 		return ""
 	}

@@ -19,7 +19,7 @@ help: ## Display this help screen
 
 # SDK/library compile check (Go libs are compiled as part of go build; no artifact)
 sdk: go.sum ## Compile all packages in the module (verifies SDK builds)
-	@echo "Compiling SDK (library packages)..."
+	@echo "Building Lumera SDK-go (library packages)..."
 	@$(GO) build ./...
 	@echo "SDK build completed successfully."
 
