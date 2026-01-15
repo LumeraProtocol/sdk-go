@@ -47,10 +47,8 @@ type Client struct {
 	localSubsAll []sdkEvent.Handler
 }
 
-
 // New creates a new cascade client
 func New(ctx context.Context, cfg Config, kr keyring.Keyring) (*Client, error) {
-
 	// Create SuperNode SDK config
 	accountCfg := snconfig.AccountConfig{
 		KeyName:         cfg.KeyName,
@@ -150,9 +148,6 @@ func newLogger(level string) (*zap.Logger, error) {
 	}
 	var parsed zapcore.Level
 	if err := parsed.Set(normalized); err != nil {
-		return nil, fmt.Errorf("log level must be one of: debug, info, warn, error")
-	}
-	if parsed > zapcore.ErrorLevel {
 		return nil, fmt.Errorf("log level must be one of: debug, info, warn, error")
 	}
 	encoderCfg := zapcore.EncoderConfig{

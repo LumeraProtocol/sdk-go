@@ -192,7 +192,11 @@ func (c *Controller) EnsureICAAddress(ctx context.Context) (string, error) {
 		if err != nil {
 			lastErr = err
 		}
-		time.Sleep(c.cfg.PollDelay)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(c.cfg.PollDelay):
+		}
 	}
 	if lastErr != nil {
 		return "", lastErr
@@ -361,7 +365,11 @@ func (c *Controller) waitForAcknowledgement(ctx context.Context, port, channel s
 		if !errors.Is(err, ErrAckNotFound) {
 			return nil, err
 		}
-		time.Sleep(c.cfg.PollDelay)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(c.cfg.PollDelay):
+		}
 	}
 	if lastErr != nil {
 		return nil, fmt.Errorf("acknowledgement not found for %s/%s/%d: %v", port, channel, sequence, lastErr)

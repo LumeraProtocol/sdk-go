@@ -80,7 +80,7 @@ func (c *Config) Validate() error {
 		c.LogLevel = "error"
 	} else {
 		var parsed zapcore.Level
-		if err := parsed.Set(level); err != nil || parsed > zapcore.ErrorLevel {
+		if err := parsed.Set(level); err != nil {
 			return fmt.Errorf("log_level must be one of: debug, info, warn, error")
 		}
 		c.LogLevel = level

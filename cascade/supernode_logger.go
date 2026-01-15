@@ -44,9 +44,6 @@ func (l *supernodeLogger) Error(ctx context.Context, msg string, keysAndValues .
 }
 
 func (l *supernodeLogger) log(ctx context.Context, level, msg string, keysAndValues ...interface{}) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	line := fmt.Sprintf("[supernode] %s%s", msg, formatKV(keysAndValues))
 	l.mu.RLock()
 	logger := l.logger
@@ -65,7 +62,6 @@ func (l *supernodeLogger) log(ctx context.Context, level, msg string, keysAndVal
 	default:
 		logger.Info(line)
 	}
-	_ = ctx
 }
 
 func formatKV(keysAndValues []interface{}) string {
