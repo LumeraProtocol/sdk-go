@@ -9,7 +9,7 @@
 GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 BUILD_DIR ?= build
-EXAMPLES ?= action-approve cascade-upload cascade-download query-actions claim-tokens ica-request-tx ica-approve-tx
+EXAMPLES ?= action-approve cascade-upload cascade-download query-actions claim-tokens ica-request-tx ica-approve-tx ica-request-verify
 
 # Default target: build SDK and examples
 all: sdk examples ## Build SDK (compile packages) and all examples

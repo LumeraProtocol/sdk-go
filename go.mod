@@ -36,6 +36,8 @@ require (
 	lukechampine.com/blake3 v1.4.1
 )
 
+require github.com/ethereum/go-ethereum v1.15.11
+
 require (
 	cosmossdk.io/collections v1.3.0 // indirect
 	cosmossdk.io/core v0.11.3 // indirect
@@ -122,6 +124,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/hdevalence/ed25519consensus v0.2.0 // indirect
+	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/huandu/skiplist v1.2.1 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/improbable-eng/grpc-web v0.15.0 // indirect
