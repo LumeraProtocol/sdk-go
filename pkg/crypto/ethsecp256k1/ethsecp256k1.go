@@ -122,8 +122,11 @@ func (pubKey *PubKey) VerifySignature(msg, sig []byte) bool {
 	if len(sig) == crypto.SignatureLength {
 		sig = sig[:crypto.SignatureLength-1] // remove recovery ID
 	}
-	hash := crypto.Keccak256(msg)
-	return crypto.VerifySignature(pubKey.Key, hash, sig)
+	//hash := crypto.Keccak256(msg)
+	//return crypto.VerifySignature(pubKey.Key, hash, sig)
+	// Use SHA256 like standard Cosmos, NOT Keccak256
+	hash := sha256.Sum256(msg)
+	return crypto.VerifySignature(pubKey.Key, hash[:], sig)
 }
 
 // Proto methods

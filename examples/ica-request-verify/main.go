@@ -19,12 +19,10 @@ import (
 	"github.com/LumeraProtocol/sdk-go/cascade"
 	"github.com/LumeraProtocol/sdk-go/constants"
 	"github.com/LumeraProtocol/sdk-go/ica"
-
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	sdktypes "github.com/LumeraProtocol/sdk-go/types"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 )
 
 // This example builds an ICS-27 MsgSendTx that executes one or more
@@ -136,6 +134,26 @@ func main() {
 		}
 		appPubkey = pub.Bytes()
 		fmt.Printf("Using ICA with address %s and app pubkey %X\n", *icaAddress, appPubkey)
+
+		//test
+		//addr, err := rec.GetAddress()
+		//if err != nil {
+		//	fmt.Printf("get address: %v\n", err)
+		//	os.Exit(1)
+		//}
+		//st := "Test string"
+		//b := []byte(st)
+		//sig, _, err := kr.SignByAddress(addr, b, signing.SignMode_SIGN_MODE_DIRECT)
+		//if err != nil {
+		//	fmt.Printf("sign: %v\n", err)
+		//	os.Exit(1)
+		//}
+		//fmt.Printf("Signature: %X\n", sig)
+		//
+		//appPk := secp256k1.PubKey{Key: appPubkey}
+		//pubKey := &appPk
+		//valid := pubKey.VerifySignature(b, sig)
+		//fmt.Printf("Verify Signature: %v\n", valid)
 	}
 
 	// Build one MsgRequestAction per file
@@ -170,8 +188,7 @@ func main() {
 
 		// Assume secp256k1-formatted pubkey bytes for app-level signatures.
 		appPk := secp256k1.PubKey{Key: appPubkey}
-		var pubKey cryptotypes.PubKey
-		pubKey = &appPk
+		pubKey := &appPk
 		fmt.Printf("Using app pubkey: %s\n", pubKey.String())
 
 		// 1. Unmarshal Metadata
@@ -211,10 +228,11 @@ func main() {
 			// 6. ADR-36 (Keplr/browser)
 			signBytes, err := MakeADR36AminoSignBytes(lumeraAddress, dataB64)
 			if err == nil && pubKey.VerifySignature(signBytes, sigRS) {
+				fmt.Printf("ADR-36 Signature Verified Successfully for %s\n", f)
+			} else {
 				fmt.Printf("ADR-36 signature verification FAILED for %s\n", f)
 				os.Exit(1)
 			}
-			fmt.Printf("ADR-36 Signature Verified Successfully for %s\n", f)
 		} else {
 			fmt.Printf("Signature Verified Successfully for %s\n", f)
 		}
