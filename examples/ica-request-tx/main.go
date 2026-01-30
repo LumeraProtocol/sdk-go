@@ -15,6 +15,7 @@ import (
 	"github.com/LumeraProtocol/sdk-go/constants"
 	"github.com/LumeraProtocol/sdk-go/ica"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
+
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 )
 
@@ -31,6 +32,7 @@ func main() {
 	icaAddress := flag.String("ica-address", "", "ICA address on Lumera (host chain)")
 	grpcAddr := flag.String("grpc-addr", "", "Lumera gRPC address (host:port)")
 	chainID := flag.String("chain-id", "", "Lumera chain ID")
+	keyringType := flag.String("keyring-type", "lumera", "Keyring type: lumera|injective")
 
 	// IBC params
 	connectionID := flag.String("connection-id", "connection-0", "IBC connection ID on controller chain")
@@ -63,8 +65,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	params := sdkcrypto.KeyringParams{AppName: "lumera", Backend: *keyringBackend, Dir: *keyringDir}
-	kr, err := sdkcrypto.NewKeyring(params)
+	// Choose app name based on keyring type
+	appName := "lumera"
+	if *keyringType == "injective" {
+		appName = "injectived"
+	}
+
+	kr, err := sdkcrypto.NewMultiChainKeyring(appName, *keyringBackend, *keyringDir)
 	if err != nil {
 		fmt.Printf("open keyring: %v\n", err)
 		os.Exit(1)

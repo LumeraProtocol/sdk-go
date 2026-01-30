@@ -22,7 +22,7 @@ require (
 	github.com/LumeraProtocol/lumera v1.9.1
 
 	// SuperNode SDK for storage operations
-	github.com/LumeraProtocol/supernode/v2 v2.4.23
+	github.com/LumeraProtocol/supernode/v2 v2.4.26
 	github.com/cometbft/cometbft v0.38.18
 	github.com/cosmos/cosmos-sdk v0.53.0
 	github.com/cosmos/go-bip39 v1.0.0
@@ -35,6 +35,8 @@ require (
 	google.golang.org/grpc v1.77.0
 	lukechampine.com/blake3 v1.4.1
 )
+
+require github.com/ethereum/go-ethereum v1.15.11
 
 require (
 	cosmossdk.io/collections v1.3.0 // indirect
@@ -122,6 +124,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/hdevalence/ed25519consensus v0.2.0 // indirect
+	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/huandu/skiplist v1.2.1 // indirect
 	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/improbable-eng/grpc-web v0.15.0 // indirect
