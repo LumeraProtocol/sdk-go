@@ -20,9 +20,11 @@ import (
 	"github.com/LumeraProtocol/sdk-go/constants"
 	"github.com/LumeraProtocol/sdk-go/ica"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
+	"github.com/LumeraProtocol/sdk-go/pkg/crypto/ethsecp256k1"
 	sdktypes "github.com/LumeraProtocol/sdk-go/types"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 )
 
 // This example builds an ICS-27 MsgSendTx that executes one or more
@@ -135,25 +137,28 @@ func main() {
 		appPubkey = pub.Bytes()
 		fmt.Printf("Using ICA with address %s and app pubkey %X\n", *icaAddress, appPubkey)
 
-		//test
-		//addr, err := rec.GetAddress()
-		//if err != nil {
-		//	fmt.Printf("get address: %v\n", err)
-		//	os.Exit(1)
-		//}
-		//st := "Test string"
-		//b := []byte(st)
-		//sig, _, err := kr.SignByAddress(addr, b, signing.SignMode_SIGN_MODE_DIRECT)
-		//if err != nil {
-		//	fmt.Printf("sign: %v\n", err)
-		//	os.Exit(1)
-		//}
-		//fmt.Printf("Signature: %X\n", sig)
-		//
-		//appPk := secp256k1.PubKey{Key: appPubkey}
-		//pubKey := &appPk
-		//valid := pubKey.VerifySignature(b, sig)
-		//fmt.Printf("Verify Signature: %v\n", valid)
+		///////////////////////////////////////////////////////
+		//test ethsecp256k1
+		addr, err := rec.GetAddress()
+		if err != nil {
+			fmt.Printf("get address: %v\n", err)
+			os.Exit(1)
+		}
+		st := "Test string"
+		b := []byte(st)
+		sig, _, err := kr.SignByAddress(addr, b, signing.SignMode_SIGN_MODE_DIRECT)
+		if err != nil {
+			fmt.Printf("sign: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Signature: %X\n", sig)
+
+		appPk := ethsecp256k1.PubKey{Key: appPubkey}
+		pubKey := &appPk
+		valid := pubKey.VerifySignature(b, sig)
+		fmt.Printf("PubKey type - %s, Key Name - %s\n", appPk.Type(), rec.Name)
+		fmt.Printf("Verify Signature: %v\n", valid)
+		///////////////////////////////////////////////////////
 	}
 
 	// Build one MsgRequestAction per file

@@ -27,7 +27,6 @@ var (
 	_ cryptotypes.PubKey  = &PubKey{}
 )
 
-// PrivKey defines a secp256k1 private key using Ethereum's Keccak256 hashing
 type PrivKey struct {
 	Key []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 }
@@ -122,8 +121,6 @@ func (pubKey *PubKey) VerifySignature(msg, sig []byte) bool {
 	if len(sig) == crypto.SignatureLength {
 		sig = sig[:crypto.SignatureLength-1] // remove recovery ID
 	}
-	//hash := crypto.Keccak256(msg)
-	//return crypto.VerifySignature(pubKey.Key, hash, sig)
 	// Use SHA256 like standard Cosmos, NOT Keccak256
 	hash := sha256.Sum256(msg)
 	return crypto.VerifySignature(pubKey.Key, hash[:], sig)
