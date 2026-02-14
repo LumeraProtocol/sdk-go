@@ -205,8 +205,10 @@ _ = packetInfo
 
 Common helpers:
 
-- `DefaultKeyringParams` / `NewKeyring` for consistent keyring setup.
-- `LoadKeyringFromMnemonic` / `ImportKeyFromMnemonic` for mnemonic-based flows.
+- `DefaultKeyringParams` / `NewKeyring` for consistent keyring setup. A single keyring supports both Cosmos (`secp256k1`) and EVM (`eth_secp256k1`) key types.
+- `KeyType` enum (`KeyTypeCosmos`, `KeyTypeEVM`) selects the key algorithm and BIP44 derivation path. Controller and host chains can each use a different `KeyType`.
+- `LoadKeyring(keyName, mnemonicFile, keyType)` creates a test keyring from a mnemonic.
+- `ImportKey(kr, keyName, mnemonicFile, hrp, keyType)` imports a mnemonic into an existing keyring.
 - `AddressFromKey` to derive HRP-specific addresses without mutating global config.
 - `NewDefaultTxConfig` and `SignTxWithKeyring` for signing with Cosmos SDK builders.
 
@@ -219,6 +221,32 @@ import (
 kr, _ := sdkcrypto.NewKeyring(sdkcrypto.DefaultKeyringParams())
 addr, _ := sdkcrypto.AddressFromKey(kr, "alice", constants.LumeraAccountHRP)
 _ = addr
+```
+
+#### Using different key types per chain
+
+When controller and host chains use different cryptographic key types, import keys
+under separate names and pass them independently:
+
+```go
+kr, _ := sdkcrypto.NewKeyring(sdkcrypto.DefaultKeyringParams())
+
+// Controller chain: standard Cosmos key (secp256k1, coin type 118)
+sdkcrypto.ImportKey(kr, "controller-key", "mnemonic.txt", "lumera", sdkcrypto.KeyTypeCosmos)
+
+// Host chain: EVM-compatible key (eth_secp256k1, coin type 60)
+sdkcrypto.ImportKey(kr, "host-key", "mnemonic.txt", "inj", sdkcrypto.KeyTypeEVM)
+```
+
+The ICA controller supports this via the `HostKeyName` config field:
+
+```go
+cfg := ica.Config{
+    Keyring:     kr,
+    KeyName:     "controller-key", // signs on the controller chain
+    HostKeyName: "host-key",       // used for host chain operations
+    // ...
+}
 ```
 
 ### Multi-Account Usage
