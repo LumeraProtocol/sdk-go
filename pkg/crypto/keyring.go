@@ -136,13 +136,13 @@ func GetKey(kr keyring.Keyring, keyName string) (*keyring.Record, error) {
 	return kr.Key(keyName)
 }
 
-// LoadKeyring creates a test keyring in dir, imports the mnemonic using the
-// specified key type, and returns the keyring, pubkey bytes, and Lumera address.
+// LoadKeyring creates a test keyring in a temporary directory under
+// os.TempDir(), imports the mnemonic using the specified key type, and returns
+// the keyring, pubkey bytes, and Lumera address.
 //
-// dir is the directory for the test keyring. If empty, a temporary directory
-// under os.TempDir() is created (cleaned up by the OS on reboot). For
-// production use, prefer NewKeyring with an explicit directory and import keys
-// via kr.NewAccount directly.
+// The temporary directory is cleaned up by the OS on reboot. For production
+// use, prefer NewKeyring with an explicit directory and import keys via
+// kr.NewAccount directly.
 func LoadKeyring(keyName, mnemonicFile string, keyType KeyType) (keyring.Keyring, []byte, string, error) {
 	if keyName == "" {
 		return nil, nil, "", fmt.Errorf("key name is required")
