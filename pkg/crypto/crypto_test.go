@@ -342,6 +342,20 @@ func TestImportKey_Errors(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestImportKey_KeyTypeMismatch(t *testing.T) {
+	kr := newTestKeyring(t)
+	mnemonicFile := writeMnemonicFile(t)
+
+	// Import as Cosmos first.
+	_, _, err := ImportKey(kr, "alice", mnemonicFile, "cosmos", KeyTypeCosmos)
+	require.NoError(t, err)
+
+	// Re-import same name with EVM should fail.
+	_, _, err = ImportKey(kr, "alice", mnemonicFile, "cosmos", KeyTypeEVM)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "already exists with algorithm")
+}
+
 func TestAddressFromKey_Errors(t *testing.T) {
 	kr := newTestKeyring(t)
 

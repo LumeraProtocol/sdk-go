@@ -136,8 +136,13 @@ func GetKey(kr keyring.Keyring, keyName string) (*keyring.Record, error) {
 	return kr.Key(keyName)
 }
 
-// LoadKeyring creates a test keyring, imports the mnemonic using the specified
-// key type, and returns the keyring, pubkey bytes, and Lumera address.
+// LoadKeyring creates a test keyring in dir, imports the mnemonic using the
+// specified key type, and returns the keyring, pubkey bytes, and Lumera address.
+//
+// dir is the directory for the test keyring. If empty, a temporary directory
+// under os.TempDir() is created (cleaned up by the OS on reboot). For
+// production use, prefer NewKeyring with an explicit directory and import keys
+// via kr.NewAccount directly.
 func LoadKeyring(keyName, mnemonicFile string, keyType KeyType) (keyring.Keyring, []byte, string, error) {
 	if keyName == "" {
 		return nil, nil, "", fmt.Errorf("key name is required")
@@ -151,6 +156,12 @@ func LoadKeyring(keyName, mnemonicFile string, keyType KeyType) (keyring.Keyring
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("create keyring dir: %w", err)
 	}
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.RemoveAll(krDir)
+		}
+	}()
 
 	kr, err := NewKeyring(KeyringParams{
 		AppName: "lumera",
@@ -182,12 +193,15 @@ func LoadKeyring(keyName, mnemonicFile string, keyType KeyType) (keyring.Keyring
 		return nil, nil, "", fmt.Errorf("pubkey is nil")
 	}
 
+	ok = true
 	return kr, pub.Bytes(), addr, nil
 }
 
 // ImportKey imports a mnemonic into an existing keyring using the specified
-// key type (if the key does not already exist), returning the pubkey bytes
-// and address for the provided HRP.
+// key type, returning the pubkey bytes and address for the provided HRP.
+//
+// If a key with the same name already exists, ImportKey verifies that its
+// algorithm matches the requested keyType and returns an error on mismatch.
 func ImportKey(kr keyring.Keyring, keyName, mnemonicFile, hrp string, keyType KeyType) ([]byte, string, error) {
 	if kr == nil {
 		return nil, "", fmt.Errorf("keyring is nil")
@@ -200,9 +214,22 @@ func ImportKey(kr keyring.Keyring, keyName, mnemonicFile, hrp string, keyType Ke
 		return nil, "", err
 	}
 
-	if _, err := kr.Key(keyName); err != nil {
+	existing, err := kr.Key(keyName)
+	if err != nil {
+		// Key does not exist — import it.
 		if _, err := kr.NewAccount(keyName, mnemonic, "", keyType.HDPath(), keyType.SigningAlgo()); err != nil {
 			return nil, "", fmt.Errorf("import key: %w", err)
+		}
+	} else {
+		// Key exists — verify the algorithm matches the requested key type.
+		pub, err := existing.GetPubKey()
+		if err != nil {
+			return nil, "", fmt.Errorf("get existing pubkey: %w", err)
+		}
+		wantAlgo := string(keyType.SigningAlgo().Name())
+		if pub.Type() != wantAlgo {
+			return nil, "", fmt.Errorf("key %q already exists with algorithm %s, but %s (%s) was requested",
+				keyName, pub.Type(), keyType.String(), wantAlgo)
 		}
 	}
 
