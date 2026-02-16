@@ -71,7 +71,11 @@ func main() {
 		appName = "injectived"
 	}
 
-	kr, err := sdkcrypto.NewMultiChainKeyring(appName, *keyringBackend, *keyringDir)
+	kr, err := sdkcrypto.NewKeyring(sdkcrypto.KeyringParams{
+		AppName: appName,
+		Backend: *keyringBackend,
+		Dir:     *keyringDir,
+	})
 	if err != nil {
 		fmt.Printf("open keyring: %v\n", err)
 		os.Exit(1)

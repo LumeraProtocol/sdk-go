@@ -64,6 +64,67 @@ defer alice.Close()
 defer bob.Close()
 ```
 
+## Crypto Helpers (`pkg/crypto`)
+
+The `pkg/crypto` package provides keyring creation, key import, and address derivation. A single keyring supports both Cosmos (`secp256k1`) and EVM (`eth_secp256k1`) key types.
+
+### Key types
+
+`KeyType` selects the cryptographic algorithm and BIP44 derivation path:
+
+| KeyType | Algorithm | BIP44 Coin Type | HD Path |
+|---------|-----------|----------------|---------|
+| `KeyTypeCosmos` | `secp256k1` | 118 | `m/44'/118'/0'/0/0` |
+| `KeyTypeEVM` | `eth_secp256k1` | 60 | `m/44'/60'/0'/0/0` |
+
+### Creating a keyring
+
+`NewKeyring` creates a keyring that accepts both key types. The algorithm is selected when importing or creating keys, not at keyring creation time.
+
+```go
+import sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
+
+kr, err := sdkcrypto.NewKeyring(sdkcrypto.DefaultKeyringParams())
+```
+
+### Importing keys from a mnemonic
+
+Use `LoadKeyring` to create a test keyring and import a key in one step:
+
+```go
+kr, pubBytes, addr, err := sdkcrypto.LoadKeyring("alice", "mnemonic.txt", sdkcrypto.KeyTypeCosmos)
+```
+
+Use `ImportKey` to add a key to an existing keyring:
+
+```go
+pubBytes, addr, err := sdkcrypto.ImportKey(kr, "bob", "mnemonic.txt", "lumera", sdkcrypto.KeyTypeCosmos)
+```
+
+### Using different key types per chain
+
+When controller and host chains use different cryptographic key types, import keys under separate names:
+
+```go
+kr, _ := sdkcrypto.NewKeyring(sdkcrypto.DefaultKeyringParams())
+
+// Controller chain: standard Cosmos key (secp256k1, coin type 118)
+sdkcrypto.ImportKey(kr, "controller-key", "mnemonic.txt", "lumera", sdkcrypto.KeyTypeCosmos)
+
+// Host chain: EVM-compatible key (eth_secp256k1, coin type 60)
+sdkcrypto.ImportKey(kr, "host-key", "mnemonic.txt", "inj", sdkcrypto.KeyTypeEVM)
+```
+
+The ICA controller supports this via the `HostKeyName` config field (see Tutorial 6 below).
+
+### Deriving addresses
+
+`AddressFromKey` derives a bech32 address for any HRP without mutating global SDK config:
+
+```go
+addr, err := sdkcrypto.AddressFromKey(kr, "alice", "lumera")
+```
+
 ## Tutorials
 
 ### 1) Query actions (read-only)
@@ -140,6 +201,7 @@ Key points:
 - For ICA, set the ICA creator address and app pubkey on the request message.
 - The Cascade client uses `ICAOwnerKeyName` + `ICAOwnerHRP` to derive the controller owner address.
   `appPubkey` should be the controller key's pubkey bytes from the keyring.
+- When controller and host chains use different key types, import keys under separate names into the same keyring and set `HostKeyName` on the ICA `Config` (see the Crypto Helpers section above).
 
 ```go
 ctx := context.Background()
@@ -186,6 +248,59 @@ if err != nil { log.Fatal(err) }
 ```
 
 Query helpers include `GetSuperNode`, `ListSuperNodes`, and `GetTopSuperNodesForBlock`.
+
+## ICA Controller Overview
+
+The `ica` package provides a production-ready ICA (Interchain Accounts / ICS-27) controller that manages the full lifecycle of cross-chain message execution against Lumera.
+
+### What it does
+
+`ica.Controller` connects to both a controller chain and the Lumera host chain over gRPC. It handles ICA registration, IBC packet construction, transaction broadcasting, acknowledgement polling, and action ID extraction — all behind a small set of methods:
+
+```go
+ctrl, _ := ica.NewController(ctx, ica.Config{
+    Controller:   controllerBaseConfig,
+    Host:         hostBaseConfig,
+    Keyring:      kr,
+    KeyName:      "controller-key",
+    HostKeyName:  "host-key",       // optional: separate key for host chain
+    ConnectionID: "connection-0",
+})
+defer ctrl.Close()
+
+addr, _ := ctrl.EnsureICAAddress(ctx)       // register + poll until ready
+result, _ := ctrl.SendRequestAction(ctx, msg) // send, wait for ack, return action ID
+txHash, _ := ctrl.SendApproveAction(ctx, approveMsg)
+```
+
+For lower-level or offline workflows, packet-building helpers are available separately: `PackRequestAny`, `BuildICAPacketData`, `BuildMsgSendTx`.
+
+### Strengths
+
+- **Minimal setup** — only gRPC endpoints, a keyring, and an IBC connection ID are required. No Docker, no relayer binary, no chain binaries.
+- **End-to-end in one call** — `SendRequestAction` builds the ICA packet, broadcasts on the controller chain, waits for tx inclusion, resolves the counterparty channel, polls for the host-chain acknowledgement, and extracts the action ID.
+- **Mixed key type support** — controller and host chains can use different cryptographic key types (`KeyTypeCosmos` / `KeyTypeEVM`) by setting `HostKeyName` to a separate key in the same keyring.
+- **Resilient polling** — configurable retry counts and delays for both ICA registration (`PollRetries` / `PollDelay`) and acknowledgement waiting (`AckRetries`).
+- **Tight Lumera integration** — purpose-built for `MsgRequestAction` and `MsgApproveAction`, with typed results (`ActionResult`) and Cascade metadata compatibility.
+
+### Limitations
+
+- **Requires running chains** — the controller connects to live gRPC endpoints. It does not spin up chains or relayers; infrastructure must already be deployed.
+- **Lumera-specific high-level methods** — `SendRequestAction` and `SendApproveAction` are tailored to Lumera action messages. Generic ICA message execution requires using the lower-level packet helpers directly.
+- **No chain lifecycle management** — unlike e2e testing frameworks (e.g., interchaintest), there is no built-in chain provisioning, genesis configuration, or relayer orchestration.
+- **Relayer dependency** — IBC packet relay between controller and host chains depends on an external relayer (e.g., Hermes). The controller does not relay packets itself.
+
+### When to use this vs. interchaintest
+
+| Aspect | `ica.Controller` | interchaintest |
+| --- | --- | --- |
+| **Purpose** | Production client / scripting | E2E integration testing |
+| **Infrastructure** | Connects to running chains | Spins up chains + relayers in Docker |
+| **Setup effort** | Config struct + keyring | Docker, chain binaries, genesis config |
+| **Iteration speed** | Fast (gRPC calls) | Slower (container lifecycle + block production) |
+| **Scope** | Lumera ICA operations | Any IBC flow, any chain |
+
+Use `ica.Controller` when you have running chains and need to execute ICA operations in production or automation scripts. Use interchaintest when you need to validate the full ICA flow in CI from scratch without external infrastructure.
 
 ## Examples and testing
 

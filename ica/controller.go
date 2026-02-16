@@ -13,45 +13,12 @@ import (
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	sdktypes "github.com/LumeraProtocol/sdk-go/types"
 	"github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	controllertypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/controller/types"
 	icatypes "github.com/cosmos/ibc-go/v10/modules/apps/27-interchain-accounts/types"
 	clienttypes "github.com/cosmos/ibc-go/v10/modules/core/02-client/types"
 	connectiontypes "github.com/cosmos/ibc-go/v10/modules/core/03-connection/types"
 	channeltypes "github.com/cosmos/ibc-go/v10/modules/core/04-channel/types"
 )
-
-const (
-	defaultRelativeTimeout = 10 * time.Minute
-	defaultPollDelay       = 2 * time.Second
-	defaultPollRetries     = 120
-	defaultAckRetries      = 120
-)
-
-// Config configures the ICA controller for a controller/host chain pair.
-type Config struct {
-	Controller base.Config
-	Host       base.Config
-	Keyring    keyring.Keyring
-	KeyName    string
-
-	ConnectionID             string
-	CounterpartyConnectionID string
-	Ordering                 channeltypes.Order
-	RelativeTimeout          time.Duration
-	PollDelay                time.Duration
-	PollRetries              int
-	AckRetries               int
-}
-
-// Controller manages ICA registration and message execution via gRPC.
-type Controller struct {
-	cfg          Config
-	controllerBC *base.Client
-	hostBC       *base.Client
-	ownerAddr    string
-	appPubkey    []byte
-}
 
 // NewController creates a new ICA controller using gRPC-based queries and txs.
 func NewController(ctx context.Context, cfg Config) (*Controller, error) {
@@ -89,11 +56,16 @@ func NewController(ctx context.Context, cfg Config) (*Controller, error) {
 		cfg.Ordering = channeltypes.ORDERED
 	}
 
+	hostKeyName := cfg.HostKeyName
+	if hostKeyName == "" {
+		hostKeyName = cfg.KeyName
+	}
+
 	controllerBC, err := base.New(ctx, cfg.Controller, cfg.Keyring, cfg.KeyName)
 	if err != nil {
 		return nil, fmt.Errorf("create controller blockchain client: %w", err)
 	}
-	hostBC, err := base.New(ctx, cfg.Host, cfg.Keyring, cfg.KeyName)
+	hostBC, err := base.New(ctx, cfg.Host, cfg.Keyring, hostKeyName)
 	if err != nil {
 		_ = controllerBC.Close()
 		return nil, fmt.Errorf("create host blockchain client: %w", err)
@@ -393,12 +365,3 @@ func (c *Controller) queryAcknowledgement(ctx context.Context, port, channel str
 	}
 	return ack, nil
 }
-
-// ErrAckNotFound is returned when no acknowledgement event is present for the packet.
-var ErrAckNotFound = errors.New("acknowledgement event not found")
-
-// ErrPacketInfoNotFound is returned when no send_packet event is found in a tx.
-var ErrPacketInfoNotFound = errors.New("send_packet event not found")
-
-// ErrICAAddressNotFound is returned when no ICA address is registered yet.
-var ErrICAAddressNotFound = errors.New("ica address not found")
