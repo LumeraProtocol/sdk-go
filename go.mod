@@ -18,10 +18,10 @@ require (
 	cosmossdk.io/math v1.5.3
 
 	// Lumera blockchain types (generated proto)
-	github.com/LumeraProtocol/lumera v1.10.0
+	github.com/LumeraProtocol/lumera v1.11.1
 
 	// SuperNode SDK for storage operations
-	github.com/LumeraProtocol/supernode/v2 v2.4.27
+	github.com/LumeraProtocol/supernode/v2 v2.4.71
 	github.com/cometbft/cometbft v0.38.20
 	github.com/cosmos/cosmos-sdk v0.53.5
 	github.com/cosmos/go-bip39 v1.0.0

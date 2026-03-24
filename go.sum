@@ -109,12 +109,12 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.50
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.50.0 h1:ig/FpDD2JofP/NExKQUbn7uOSZzJAQqogfqluZK4ed4=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.50.0/go.mod h1:otE2jQekW/PqXk1Awf5lmfokJx4uwuqcj1ab5SpGeW0=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
-github.com/LumeraProtocol/lumera v1.10.0 h1:IIuvqlFNUPoSkTJ3DoKDNHtr3E0+8GmE4CiNbgTzI2s=
-github.com/LumeraProtocol/lumera v1.10.0/go.mod h1:p2sZZG3bLzSBdaW883qjuU3DXXY4NJzTTwLywr8uI0w=
+github.com/LumeraProtocol/lumera v1.11.1 h1:4svXNVHaRDIJyRuQv8bG5m1/20ocqiGo576/p8/G1Sw=
+github.com/LumeraProtocol/lumera v1.11.1/go.mod h1:p2sZZG3bLzSBdaW883qjuU3DXXY4NJzTTwLywr8uI0w=
 github.com/LumeraProtocol/rq-go v0.2.1 h1:8B3UzRChLsGMmvZ+UVbJsJj6JZzL9P9iYxbdUwGsQI4=
 github.com/LumeraProtocol/rq-go v0.2.1/go.mod h1:APnKCZRh1Es2Vtrd2w4kCLgAyaL5Bqrkz/BURoRJ+O8=
-github.com/LumeraProtocol/supernode/v2 v2.4.27 h1:Bw2tpuA2uly8ajYT+Q5bKRWyUugPlKHV3S5oMQGGoF4=
-github.com/LumeraProtocol/supernode/v2 v2.4.27/go.mod h1:tTsXf0CV8OHAzVDQH/IGjHQ1fJtp0ABZmavkVCoYE4U=
+github.com/LumeraProtocol/supernode/v2 v2.4.71 h1:zP4Ag2HHVg8yvKMOOUxyj0MRXuWedKPICe+ckqx6jy4=
+github.com/LumeraProtocol/supernode/v2 v2.4.71/go.mod h1:GtQ/hpHPa4LWIyAsWb8GW+G2Bf6/vMFqloipTFAlqIc=
 github.com/Masterminds/semver/v3 v3.3.1 h1:QtNSWtVZ3nBfk8mAOu/B6v7FMJ+NHTIgUPi7rj+4nv4=
 github.com/Masterminds/semver/v3 v3.3.1/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
