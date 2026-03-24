@@ -69,17 +69,17 @@ func formatKV(keysAndValues []interface{}) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(" ")
+	_, _ = b.WriteString(" ")
 	for i := 0; i < len(keysAndValues); i += 2 {
 		if i > 0 {
-			b.WriteString(" ")
+			_, _ = b.WriteString(" ")
 		}
 		key := keysAndValues[i]
 		val := "(missing)"
 		if i+1 < len(keysAndValues) {
 			val = fmt.Sprintf("%v", keysAndValues[i+1])
 		}
-		b.WriteString(fmt.Sprintf("%v=%v", key, val))
+		_, _ = fmt.Fprintf(&b, "%v=%v", key, val)
 	}
 	return b.String()
 }
