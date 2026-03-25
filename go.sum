@@ -113,8 +113,8 @@ github.com/LumeraProtocol/lumera v1.11.1 h1:4svXNVHaRDIJyRuQv8bG5m1/20ocqiGo576/
 github.com/LumeraProtocol/lumera v1.11.1/go.mod h1:p2sZZG3bLzSBdaW883qjuU3DXXY4NJzTTwLywr8uI0w=
 github.com/LumeraProtocol/rq-go v0.2.1 h1:8B3UzRChLsGMmvZ+UVbJsJj6JZzL9P9iYxbdUwGsQI4=
 github.com/LumeraProtocol/rq-go v0.2.1/go.mod h1:APnKCZRh1Es2Vtrd2w4kCLgAyaL5Bqrkz/BURoRJ+O8=
-github.com/LumeraProtocol/supernode/v2 v2.4.71 h1:zP4Ag2HHVg8yvKMOOUxyj0MRXuWedKPICe+ckqx6jy4=
-github.com/LumeraProtocol/supernode/v2 v2.4.71/go.mod h1:GtQ/hpHPa4LWIyAsWb8GW+G2Bf6/vMFqloipTFAlqIc=
+github.com/LumeraProtocol/supernode/v2 v2.4.72 h1:OIRpIKlY5BC2sQ3ghm/4sC7Cow5/kY/pJDdN0xg2W0o=
+github.com/LumeraProtocol/supernode/v2 v2.4.72/go.mod h1:GtQ/hpHPa4LWIyAsWb8GW+G2Bf6/vMFqloipTFAlqIc=
 github.com/Masterminds/semver/v3 v3.3.1 h1:QtNSWtVZ3nBfk8mAOu/B6v7FMJ+NHTIgUPi7rj+4nv4=
 github.com/Masterminds/semver/v3 v3.3.1/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
