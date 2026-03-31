@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"google.golang.org/grpc"
@@ -15,14 +16,41 @@ import (
 
 // Client provides common Cosmos SDK gRPC and tx helpers.
 type Client struct {
+	mu sync.RWMutex
+
 	conn    *grpc.ClientConn
 	config  Config
 	keyring keyring.Keyring
 	keyName string
+
+	newConnFn      func(context.Context) (*grpc.ClientConn, error)
+	reconnectHook  func(context.Context) error
+	sleepHook      func(ctx context.Context, dMs int64) error
+	jitterHook     func(maxExclusive int64) int64
 }
 
 // New creates a base blockchain client with a gRPC connection.
 func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*Client, error) {
+	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
+
+	conn, err := newGRPCConn(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
+	}
+
+	c := &Client{
+		conn:    conn,
+		config:  cfg,
+		keyring: kr,
+		keyName: keyName,
+	}
+	c.newConnFn = func(context.Context) (*grpc.ClientConn, error) {
+		return newGRPCConn(cfg)
+	}
+	return c, nil
+}
+
+func newGRPCConn(cfg Config) (*grpc.ClientConn, error) {
 	// Determine if we should use TLS based on the endpoint.
 	// Use TLS if: port is 443, or hostname doesn't start with "localhost"/"127.0.0.1".
 	useTLS := shouldUseTLS(cfg.GRPCAddr)
@@ -48,23 +76,41 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		),
 	}
 
-	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
-
 	conn, err := grpc.NewClient(cfg.GRPCAddr, dialOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
+		return nil, err
+	}
+	return conn, nil
+}
+
+func (c *Client) reconnect(ctx context.Context) error {
+	if c.reconnectHook != nil {
+		return c.reconnectHook(ctx)
+	}
+	if c.newConnFn == nil {
+		return fmt.Errorf("newConnFn is not configured")
 	}
 
-	return &Client{
-		conn:    conn,
-		config:  cfg,
-		keyring: kr,
-		keyName: keyName,
-	}, nil
+	newConn, err := c.newConnFn(ctx)
+	if err != nil {
+		return fmt.Errorf("reconnect to gRPC: %w", err)
+	}
+
+	c.mu.Lock()
+	oldConn := c.conn
+	c.conn = newConn
+	c.mu.Unlock()
+
+	if oldConn != nil {
+		_ = oldConn.Close()
+	}
+	return nil
 }
 
 // Close closes the underlying gRPC connection.
 func (c *Client) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.conn != nil {
 		return c.conn.Close()
 	}
@@ -73,6 +119,8 @@ func (c *Client) Close() error {
 
 // GRPCConn exposes the underlying gRPC connection for specialized queries.
 func (c *Client) GRPCConn() *grpc.ClientConn {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.conn
 }
 

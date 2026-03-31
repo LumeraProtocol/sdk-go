@@ -3,6 +3,7 @@ package base
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -16,6 +17,87 @@ import (
 	waittx "github.com/LumeraProtocol/sdk-go/internal/wait-tx"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 )
+
+const (
+	accountInfoMaxAttempts = 5
+	accountInfoBaseBackoff = 200 * time.Millisecond
+	accountInfoMaxBackoff  = 2 * time.Second
+)
+
+func isTransientAccountInfoError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if status.Code(err) == codes.Unavailable {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "authentication handshake failed: eof") ||
+		strings.Contains(msg, "transport: authentication handshake failed")
+}
+
+func (c *Client) accountInfoBackoff(attempt int) time.Duration {
+	if attempt <= 1 {
+		return accountInfoBaseBackoff
+	}
+	delay := accountInfoBaseBackoff << (attempt - 1)
+	if delay > accountInfoMaxBackoff {
+		delay = accountInfoMaxBackoff
+	}
+	// Add jitter [0, 25% of delay).
+	jitterMax := int64(delay / 4)
+	if jitterMax > 0 {
+		var jitter int64
+		if c.jitterHook != nil {
+			jitter = c.jitterHook(jitterMax)
+		} else {
+			jitter = rand.Int63n(jitterMax)
+		}
+		delay += time.Duration(jitter)
+	}
+	return delay
+}
+
+func (c *Client) sleepWithContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	if c.sleepHook != nil {
+		return c.sleepHook(ctx, d.Milliseconds())
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+func (c *Client) queryAccountInfo(ctx context.Context, address string) (*authtypes.QueryAccountInfoResponse, error) {
+	authq := authtypes.NewQueryClient(c.GRPCConn())
+	return authq.AccountInfo(ctx, &authtypes.QueryAccountInfoRequest{Address: address})
+}
+
+func (c *Client) queryAccountInfoWithRetry(ctx context.Context, address string) (*authtypes.QueryAccountInfoResponse, error) {
+	var lastErr error
+	for attempt := 1; attempt <= accountInfoMaxAttempts; attempt++ {
+		resp, err := c.queryAccountInfo(ctx, address)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isTransientAccountInfoError(err) || attempt == accountInfoMaxAttempts {
+			break
+		}
+		_ = c.reconnect(ctx)
+		if err := c.sleepWithContext(ctx, c.accountInfoBackoff(attempt)); err != nil {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
 
 // Simulate runs a gas simulation for a provided tx bytes.
 func (c *Client) Simulate(ctx context.Context, txBytes []byte) (uint64, error) {
@@ -105,10 +187,7 @@ func (c *Client) buildAndSignTx(ctx context.Context, msg sdk.Msg, memo string, g
 		return nil, fmt.Errorf("derive address for %q: %w", c.keyName, err)
 	}
 
-	authq := authtypes.NewQueryClient(c.conn)
-	acctResp, err := authq.AccountInfo(ctx, &authtypes.QueryAccountInfoRequest{
-		Address: accAddr,
-	})
+	acctResp, err := c.queryAccountInfoWithRetry(ctx, accAddr)
 	if err != nil {
 		return nil, fmt.Errorf("query account info: %w", err)
 	}
