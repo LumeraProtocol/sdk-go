@@ -12,6 +12,7 @@ import (
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	//audittypes "github.com/LumeraProtocol/lumera/x/audit/types"
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
+	evmigrationtypes "github.com/LumeraProtocol/lumera/x/evmigration/types"
 	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
 )
 
@@ -23,10 +24,11 @@ type Client struct {
 	*base.Client
 
 	// Module-specific clients
-	Action    *ActionClient
-	SuperNode *SuperNodeClient
-	Claim     *ClaimClient
-	Audit     *AuditClient
+	Action       *ActionClient
+	SuperNode    *SuperNodeClient
+	Claim        *ClaimClient
+	EVMigration  *EVMigrationClient
+	Audit        *AuditClient
 }
 
 // New creates a new Lumera blockchain client.
@@ -57,6 +59,9 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		},
 		Claim: &ClaimClient{
 			query: claimtypes.NewQueryClient(conn),
+		},
+		EVMigration: &EVMigrationClient{
+			query: evmigrationtypes.NewQueryClient(conn),
 		},
 		Audit: &AuditClient{
 			//query: audittypes.NewQueryClient(conn),

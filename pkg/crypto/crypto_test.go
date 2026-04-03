@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/LumeraProtocol/sdk-go/constants"
-	sdkethsecp256k1 "github.com/LumeraProtocol/sdk-go/pkg/crypto/ethsecp256k1"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/evm/crypto/ethsecp256k1"
 	"github.com/cosmos/go-bip39"
 	"github.com/stretchr/testify/require"
 )
@@ -41,7 +41,7 @@ func TestKeyType_HDPath(t *testing.T) {
 
 func TestKeyType_SigningAlgo(t *testing.T) {
 	require.Equal(t, hd.Secp256k1.Name(), KeyTypeCosmos.SigningAlgo().Name())
-	require.Equal(t, hd.PubKeyType(sdkethsecp256k1.KeyType), KeyTypeEVM.SigningAlgo().Name())
+	require.Equal(t, hd.PubKeyType(ethsecp256k1.KeyType), KeyTypeEVM.SigningAlgo().Name())
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ func TestNewKeyring_SupportsBothAlgos(t *testing.T) {
 	require.NoError(t, err)
 	pk2, err := rec2.GetPubKey()
 	require.NoError(t, err)
-	require.Equal(t, sdkethsecp256k1.KeyType, pk2.Type())
+	require.Equal(t, ethsecp256k1.KeyType, pk2.Type())
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@ func TestLoadKeyring_EVM(t *testing.T) {
 	require.NoError(t, err)
 	pk, err := rec.GetPubKey()
 	require.NoError(t, err)
-	require.Equal(t, sdkethsecp256k1.KeyType, pk.Type())
+	require.Equal(t, ethsecp256k1.KeyType, pk.Type())
 }
 
 func TestLoadKeyring_DifferentKeyTypesDerivesDifferentAddress(t *testing.T) {
@@ -184,7 +184,7 @@ func TestImportKey_EVM(t *testing.T) {
 	require.NoError(t, err)
 	pk, err := rec.GetPubKey()
 	require.NoError(t, err)
-	require.Equal(t, sdkethsecp256k1.KeyType, pk.Type())
+	require.Equal(t, ethsecp256k1.KeyType, pk.Type())
 }
 
 // TestImportKey_MultiChain imports both Cosmos and EVM keys into a single
@@ -219,7 +219,7 @@ func TestImportKey_MultiChain(t *testing.T) {
 	require.NoError(t, err)
 	evmPK, err := evmRec.GetPubKey()
 	require.NoError(t, err)
-	require.Equal(t, sdkethsecp256k1.KeyType, evmPK.Type())
+	require.Equal(t, ethsecp256k1.KeyType, evmPK.Type())
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +243,7 @@ func TestKeyBehaviorMatrix(t *testing.T) {
 		{
 			name:        "evm",
 			keyType:     KeyTypeEVM,
-			expectedAlg: sdkethsecp256k1.KeyType,
+			expectedAlg: ethsecp256k1.KeyType,
 		},
 	}
 

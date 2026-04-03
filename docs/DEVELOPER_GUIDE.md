@@ -4,7 +4,7 @@ This guide is for engineers building on the Lumera blockchain and Cascade storag
 
 ## Prerequisites
 
-- Go 1.25+ with module support.
+- Go 1.26+ with module support.
 - Access to Lumera endpoints: `grpc` (chain queries/tx), `rpc` (websocket for tx inclusion), and at least one SuperNode for Cascade uploads/downloads.
 - A Cosmos keyring entry that can sign Lumera transactions (`github.com/cosmos/cosmos-sdk/crypto/keyring` is used throughout the SDK).
 

@@ -13,6 +13,8 @@ import (
 	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 )
 
+const defaultMaxMessageSize = 50 * 1024 * 1024
+
 // Client provides common Cosmos SDK gRPC and tx helpers.
 type Client struct {
 	conn    *grpc.ClientConn
@@ -23,6 +25,8 @@ type Client struct {
 
 // New creates a base blockchain client with a gRPC connection.
 func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*Client, error) {
+	applyConfigDefaults(&cfg)
+
 	// Determine if we should use TLS based on the endpoint.
 	// Use TLS if: port is 443, or hostname doesn't start with "localhost"/"127.0.0.1".
 	useTLS := shouldUseTLS(cfg.GRPCAddr)
@@ -48,8 +52,6 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		),
 	}
 
-	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
-
 	conn, err := grpc.NewClient(cfg.GRPCAddr, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
@@ -61,6 +63,19 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		keyring: kr,
 		keyName: keyName,
 	}, nil
+}
+
+func applyConfigDefaults(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	if cfg.MaxRecvMsgSize <= 0 {
+		cfg.MaxRecvMsgSize = defaultMaxMessageSize
+	}
+	if cfg.MaxSendMsgSize <= 0 {
+		cfg.MaxSendMsgSize = defaultMaxMessageSize
+	}
+	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
 }
 
 // Close closes the underlying gRPC connection.

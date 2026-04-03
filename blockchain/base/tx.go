@@ -7,6 +7,8 @@ import (
 	"time"
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
+	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	signingtypes "github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -16,6 +18,26 @@ import (
 	waittx "github.com/LumeraProtocol/sdk-go/internal/wait-tx"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 )
+
+const defaultSignedTxGasLimit = 200000
+
+// TxBuildOptions controls how a transaction is assembled and signed.
+type TxBuildOptions struct {
+	Messages       []sdk.Msg
+	Memo           string
+	GasAdjustment  float64
+	GasLimit       uint64
+	SkipSimulation bool
+	AccountNumber  *uint64
+	Sequence       *uint64
+	FeeAmount      sdk.Coins
+}
+
+// TxSignerInfo contains the signer account metadata used for signing.
+type TxSignerInfo struct {
+	AccountNumber uint64
+	Sequence      uint64
+}
 
 // Simulate runs a gas simulation for a provided tx bytes.
 func (c *Client) Simulate(ctx context.Context, txBytes []byte) (uint64, error) {
@@ -54,9 +76,28 @@ func (c *Client) Broadcast(ctx context.Context, txBytes []byte, mode txtypes.Bro
 	return resp.TxResponse.GetTxhash(), nil
 }
 
+// BroadcastAndWait broadcasts signed tx bytes, then waits for final inclusion.
+func (c *Client) BroadcastAndWait(ctx context.Context, txBytes []byte, mode txtypes.BroadcastMode) (string, *txtypes.GetTxResponse, error) {
+	txHash, err := c.Broadcast(ctx, txBytes, mode)
+	if err != nil {
+		return "", nil, err
+	}
+
+	resp, err := c.WaitForTxInclusion(ctx, txHash)
+	if err != nil {
+		return txHash, nil, err
+	}
+
+	return txHash, resp, nil
+}
+
 // BuildAndSignTx builds a transaction with one message, simulates gas, then signs it.
 func (c *Client) BuildAndSignTx(ctx context.Context, msg sdk.Msg, memo string) ([]byte, error) {
-	return c.buildAndSignTx(ctx, msg, memo, 1.3)
+	return c.BuildAndSignTxWithOptions(ctx, TxBuildOptions{
+		Messages:      []sdk.Msg{msg},
+		Memo:          memo,
+		GasAdjustment: 1.3,
+	})
 }
 
 // BuildAndSignTxWithGasAdjustment builds a transaction with one message, simulates gas,
@@ -65,61 +106,45 @@ func (c *Client) BuildAndSignTxWithGasAdjustment(ctx context.Context, msg sdk.Ms
 	if gasAdjustment <= 0 {
 		gasAdjustment = 1.3
 	}
-	return c.buildAndSignTx(ctx, msg, memo, gasAdjustment)
+	return c.BuildAndSignTxWithOptions(ctx, TxBuildOptions{
+		Messages:      []sdk.Msg{msg},
+		Memo:          memo,
+		GasAdjustment: gasAdjustment,
+	})
 }
 
-func (c *Client) buildAndSignTx(ctx context.Context, msg sdk.Msg, memo string, gasAdjustment float64) ([]byte, error) {
-	if c.keyring == nil {
-		return nil, fmt.Errorf("keyring is required")
+// BuildAndSignTxWithOptions builds and signs a transaction using explicit options.
+func (c *Client) BuildAndSignTxWithOptions(ctx context.Context, opts TxBuildOptions) ([]byte, error) {
+	txCfg, builder, signerInfo, err := c.PrepareTx(ctx, opts)
+	if err != nil {
+		return nil, err
 	}
-	if strings.TrimSpace(c.keyName) == "" {
-		return nil, fmt.Errorf("key name is required")
-	}
-	if strings.TrimSpace(c.config.AccountHRP) == "" {
-		return nil, fmt.Errorf("account HRP is required")
-	}
-	if strings.TrimSpace(c.config.FeeDenom) == "" {
-		return nil, fmt.Errorf("fee denom is required")
-	}
-	if c.config.GasPrice.IsNil() || c.config.GasPrice.IsZero() {
-		return nil, fmt.Errorf("gas price is required")
-	}
+	return c.SignPreparedTx(ctx, txCfg, builder, signerInfo)
+}
 
-	// 1) Tx config and builder
+// PrepareTx builds an unsigned tx builder and resolves the signer metadata.
+func (c *Client) PrepareTx(ctx context.Context, opts TxBuildOptions) (client.TxConfig, client.TxBuilder, TxSignerInfo, error) {
 	txCfg := sdkcrypto.NewDefaultTxConfig()
 	builder := txCfg.NewTxBuilder()
-	if err := builder.SetMsgs(msg); err != nil {
-		return nil, fmt.Errorf("set msgs: %w", err)
+
+	if err := c.validateTxBuildOptions(opts); err != nil {
+		return nil, nil, TxSignerInfo{}, err
 	}
-	if memo != "" {
-		builder.SetMemo(memo)
+	if err := builder.SetMsgs(opts.Messages...); err != nil {
+		return nil, nil, TxSignerInfo{}, fmt.Errorf("set msgs: %w", err)
+	}
+	if opts.Memo != "" {
+		builder.SetMemo(opts.Memo)
 	}
 
-	// 2) Resolve account number/sequence BEFORE simulation
-	rec, err := c.keyring.Key(c.keyName)
+	rec, signerInfo, err := c.resolveSignerInfo(ctx, opts)
 	if err != nil {
-		return nil, fmt.Errorf("load key %q: %w", c.keyName, err)
-	}
-	accAddr, err := sdkcrypto.AddressFromKey(c.keyring, c.keyName, c.config.AccountHRP)
-	if err != nil {
-		return nil, fmt.Errorf("derive address for %q: %w", c.keyName, err)
+		return nil, nil, TxSignerInfo{}, err
 	}
 
-	authq := authtypes.NewQueryClient(c.conn)
-	acctResp, err := authq.AccountInfo(ctx, &authtypes.QueryAccountInfoRequest{
-		Address: accAddr,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("query account info: %w", err)
-	}
-	if acctResp == nil || acctResp.Info == nil {
-		return nil, fmt.Errorf("empty account info response")
-	}
-
-	// 3) Build placeholder signature using real sequence
 	pk, err := rec.GetPubKey()
 	if err != nil {
-		return nil, fmt.Errorf("get pubkey for %q: %w", c.keyName, err)
+		return nil, nil, TxSignerInfo{}, fmt.Errorf("get pubkey for %q: %w", c.keyName, err)
 	}
 	signMode := txCfg.SignModeHandler().DefaultMode()
 	placeholder := signingtypes.SignatureV2{
@@ -127,59 +152,155 @@ func (c *Client) buildAndSignTx(ctx context.Context, msg sdk.Msg, memo string, g
 		Data: &signingtypes.SingleSignatureData{
 			SignMode: signingtypes.SignMode(signMode),
 		},
-		Sequence: acctResp.Info.Sequence, // use real sequence for simulation
+		Sequence: signerInfo.Sequence,
 	}
 	if err := builder.SetSignatures(placeholder); err != nil {
-		return nil, fmt.Errorf("set placeholder signature: %w", err)
+		return nil, nil, TxSignerInfo{}, fmt.Errorf("set placeholder signature: %w", err)
 	}
 
-	// 4) Simulate with placeholder to get gas
-	unsignedBytes, err := txCfg.TxEncoder()(builder.GetTx())
+	gas, err := c.resolveGasLimit(ctx, txCfg, builder, opts)
 	if err != nil {
-		return nil, fmt.Errorf("encode unsigned tx: %w", err)
-	}
-
-	gasUsed, err := c.Simulate(ctx, unsignedBytes)
-	gas := uint64(0)
-	if err == nil && gasUsed > 0 {
-		// add an adjustable buffer
-		gas = uint64(float64(gasUsed) * gasAdjustment)
-		if gas == 0 {
-			gas = gasUsed
-		}
-	} else {
-		// On simulation failure, proceed with a conservative default gas
-		if builder.GetTx().GetGas() == 0 {
-			gas = 200000
-		}
+		return nil, nil, TxSignerInfo{}, err
 	}
 	builder.SetGasLimit(gas)
 
-	err = builder.SetSignatures() // clear placeholder signature
-	if err != nil {
-		return nil, fmt.Errorf("clear placeholder signature: %w", err)
+	if err := builder.SetSignatures(); err != nil {
+		return nil, nil, TxSignerInfo{}, fmt.Errorf("clear placeholder signature: %w", err)
 	}
 
-	// Ensure a minimum fee to satisfy chain requirements
-	feeDec := c.config.GasPrice.MulInt64(int64(gas)).Ceil().TruncateInt()
-	minFee := sdk.NewCoins(sdk.NewCoin(c.config.FeeDenom, feeDec))
-	builder.SetFeeAmount(minFee)
+	feeAmount, err := c.resolveFeeAmount(gas, opts)
+	if err != nil {
+		return nil, nil, TxSignerInfo{}, err
+	}
+	builder.SetFeeAmount(feeAmount)
 
-	// 5) Sign with real credentials, overwriting placeholder
+	return txCfg, builder, signerInfo, nil
+}
+
+// SignPreparedTx signs a prepared tx builder using explicit signer info.
+func (c *Client) SignPreparedTx(ctx context.Context, txCfg client.TxConfig, builder client.TxBuilder, signerInfo TxSignerInfo) ([]byte, error) {
+	if c.keyring == nil {
+		return nil, fmt.Errorf("keyring is required")
+	}
+	if strings.TrimSpace(c.keyName) == "" {
+		return nil, fmt.Errorf("key name is required")
+	}
 	if err := sdkcrypto.SignTxWithKeyring(
 		ctx, txCfg, c.keyring, c.keyName, builder,
-		c.config.ChainID, acctResp.Info.AccountNumber, acctResp.Info.Sequence, true,
+		c.config.ChainID, signerInfo.AccountNumber, signerInfo.Sequence, true,
 	); err != nil {
 		return nil, fmt.Errorf("sign tx: %w", err)
 	}
 
-	// 6) Encode signed tx
 	signedBytes, err := txCfg.TxEncoder()(builder.GetTx())
 	if err != nil {
 		return nil, fmt.Errorf("encode signed tx: %w", err)
 	}
 
 	return signedBytes, nil
+}
+
+func (c *Client) validateTxBuildOptions(opts TxBuildOptions) error {
+	if c.keyring == nil {
+		return fmt.Errorf("keyring is required")
+	}
+	if strings.TrimSpace(c.keyName) == "" {
+		return fmt.Errorf("key name is required")
+	}
+	if len(opts.Messages) == 0 {
+		return fmt.Errorf("at least one message is required")
+	}
+	if strings.TrimSpace(c.config.AccountHRP) == "" {
+		return fmt.Errorf("account HRP is required")
+	}
+	if opts.FeeAmount.Empty() {
+		if strings.TrimSpace(c.config.FeeDenom) == "" {
+			return fmt.Errorf("fee denom is required")
+		}
+		if c.config.GasPrice.IsNil() || c.config.GasPrice.IsZero() {
+			return fmt.Errorf("gas price is required")
+		}
+	}
+	return nil
+}
+
+func (c *Client) resolveSignerInfo(ctx context.Context, opts TxBuildOptions) (*keyring.Record, TxSignerInfo, error) {
+	rec, err := c.keyring.Key(c.keyName)
+	if err != nil {
+		return nil, TxSignerInfo{}, fmt.Errorf("load key %q: %w", c.keyName, err)
+	}
+
+	info := TxSignerInfo{}
+	if opts.AccountNumber != nil {
+		info.AccountNumber = *opts.AccountNumber
+	}
+	if opts.Sequence != nil {
+		info.Sequence = *opts.Sequence
+	}
+	if opts.AccountNumber != nil && opts.Sequence != nil {
+		return rec, info, nil
+	}
+
+	accAddr, err := sdkcrypto.AddressFromKey(c.keyring, c.keyName, c.config.AccountHRP)
+	if err != nil {
+		return nil, TxSignerInfo{}, fmt.Errorf("derive address for %q: %w", c.keyName, err)
+	}
+
+	authq := authtypes.NewQueryClient(c.conn)
+	acctResp, err := authq.AccountInfo(ctx, &authtypes.QueryAccountInfoRequest{
+		Address: accAddr,
+	})
+	if err != nil {
+		return nil, TxSignerInfo{}, fmt.Errorf("query account info: %w", err)
+	}
+	if acctResp == nil || acctResp.Info == nil {
+		return nil, TxSignerInfo{}, fmt.Errorf("empty account info response")
+	}
+	if opts.AccountNumber == nil {
+		info.AccountNumber = acctResp.Info.AccountNumber
+	}
+	if opts.Sequence == nil {
+		info.Sequence = acctResp.Info.Sequence
+	}
+
+	return rec, info, nil
+}
+
+func (c *Client) resolveGasLimit(ctx context.Context, txCfg client.TxConfig, builder client.TxBuilder, opts TxBuildOptions) (uint64, error) {
+	if opts.GasLimit > 0 {
+		return opts.GasLimit, nil
+	}
+	if opts.SkipSimulation {
+		return defaultSignedTxGasLimit, nil
+	}
+
+	unsignedBytes, err := txCfg.TxEncoder()(builder.GetTx())
+	if err != nil {
+		return 0, fmt.Errorf("encode unsigned tx: %w", err)
+	}
+
+	gasUsed, simErr := c.Simulate(ctx, unsignedBytes)
+	if simErr != nil || gasUsed == 0 {
+		return defaultSignedTxGasLimit, nil
+	}
+
+	gasAdjustment := opts.GasAdjustment
+	if gasAdjustment <= 0 {
+		gasAdjustment = 1.3
+	}
+	gas := uint64(float64(gasUsed) * gasAdjustment)
+	if gas == 0 {
+		gas = gasUsed
+	}
+	return gas, nil
+}
+
+func (c *Client) resolveFeeAmount(gas uint64, opts TxBuildOptions) (sdk.Coins, error) {
+	if !opts.FeeAmount.Empty() {
+		return opts.FeeAmount, nil
+	}
+	feeDec := c.config.GasPrice.MulInt64(int64(gas)).Ceil().TruncateInt()
+	return sdk.NewCoins(sdk.NewCoin(c.config.FeeDenom, feeDec)), nil
 }
 
 // GetTx fetches a transaction by hash via the tx service.
