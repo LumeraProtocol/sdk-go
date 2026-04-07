@@ -1,0 +1,4 @@
+type = "repo"
+description = "sdk-go repo"
+workspace = "lumera-dev"
+platform = "claude-code"
