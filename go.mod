@@ -1,6 +1,6 @@
 module github.com/LumeraProtocol/sdk-go
 
-go 1.25.5
+go 1.25.9
 
 // Pin compatible versions to prevent go mod tidy from updating
 replace (
@@ -18,11 +18,11 @@ require (
 	cosmossdk.io/math v1.5.3
 
 	// Lumera blockchain types (generated proto)
-	github.com/LumeraProtocol/lumera v1.11.1
+	github.com/LumeraProtocol/lumera v1.12.0-rc
 
 	// SuperNode SDK for storage operations
-	github.com/LumeraProtocol/supernode/v2 v2.4.72
-	github.com/cometbft/cometbft v0.38.20
+	github.com/LumeraProtocol/supernode/v2 v2.5.0-rc
+	github.com/cometbft/cometbft v0.38.21
 	github.com/cosmos/cosmos-sdk v0.53.5
 	github.com/cosmos/go-bip39 v1.0.0
 	github.com/cosmos/gogoproto v1.7.2
