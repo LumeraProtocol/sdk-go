@@ -270,7 +270,69 @@ _, err = lumera.Blockchain.MigrateValidatorTx(ctx, vmsg, "")
 
 Read-only helpers: `MigrationRecord(legacyAddress)`, `MigrationRecordByNewAddress(newAddress)`, `MigrationStats(ctx)`, and `Params(ctx)`. `MigrationProof` construction is chain-specific and out of scope here — see the `x/evmigration` proto definitions for the required fields.
 
-### 8) Manage SuperNodes
+### 8) Send an Ethereum-format transaction
+
+Lumera accepts EIP-1559 transactions signed in Ethereum format and wrapped as `MsgEthereumTx`. The SDK handles nonce, gas, fee, signing, and broadcast end-to-end.
+
+```go
+// Configure the client with the EVM chain ID and Lumera's precisebank denoms.
+lumera, err := client.New(ctx, cfg, kr,
+    client.WithKeyName("alice"),                     // eth_secp256k1 key
+    client.WithEVMChainID(big.NewInt(1414)),         // EIP-155 chain ID
+    client.WithEVMNativeDenom("ulume"),
+    client.WithEVMExtendedDenom("alume"),
+)
+
+to := common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+amount := sdkcrypto.Wei(sdkmath.NewInt(1)) // 1 ulume = 10^12 alume
+
+res, err := lumera.Blockchain.EVM.SendEthereumTransaction(ctx, &to, nil, &blockchain.EthereumTxOptions{
+    Value: amount,
+})
+if err != nil { log.Fatal(err) }
+log.Printf("eth tx %s cosmos tx %s height %d gas %d",
+    res.EthTxHash.Hex(), res.CosmosHash, res.Height, res.GasUsed)
+```
+
+Other helpers on `Blockchain.EVM`:
+
+- `CallContract(ctx, to, calldata)` for read-only ABI calls.
+- `DeployContract(ctx, bytecode, opts)` for contract creation (returns the deployed address).
+- `RawEthereumTx(ctx, signedTx)` for callers that sign elsewhere (hardware wallet, MetaMask).
+
+Nonce is shared with the cosmos auth sequence on Lumera — mixing `SendEthereumTransaction` and `BuildAndSignTx` for the same key needs no coordination, but a stale cached nonce will. The SDK currently does not cache nonces (per-call lookup against `EthAccount`).
+
+### 9) ERC20 conversion
+
+Wrap a cosmos coin as an ERC20 token, or unwrap back:
+
+```go
+// ulume -> ERC20 representation for the EVM address.
+coin := sdk.NewInt64Coin("ulume", 1_000_000)
+recv := common.HexToAddress("0xAbC...")
+res, err := lumera.Blockchain.ConvertCoinToERC20(ctx, coin, recv, "")
+
+// ERC20 balance via the standard ABI helpers (no Solidity compilation needed).
+contract := common.HexToAddress("0xCafe...")
+holder  := common.HexToAddress("0xBeef...")
+bal, err := lumera.Blockchain.ERC20.Erc20Balance(ctx, contract, holder)
+```
+
+### 10) Invoke a Lumera precompile
+
+Custom precompiles at `0x0901` (action), `0x0902` (supernode), and `0x0903` (wasm) are wrapped by `EVMClient.Action / Supernode / Wasm`. Each exposes a generic `Call` (read) and `Send` (state-changing) that pack calldata via the embedded ABI:
+
+```go
+// Read: get the action module params from the EVM side.
+out, err := lumera.Blockchain.EVM.Action.Call(ctx, "getParams")
+
+// Write: approve an action via the precompile, signed with an eth_secp256k1 key.
+_, err = lumera.Blockchain.EVM.Action.Send(ctx, "approveAction", nil, "action-id-here")
+```
+
+The published ABI is in `pkg/evm/precompiles/abi/`. For typed wrappers around specific methods, compose `precompiles.PackCall` with your own struct definitions or import them from `cosmos/evm`.
+
+### 11) Manage SuperNodes
 
 Registration/updates use `lumera.Blockchain.SuperNode` transaction helpers:
 
