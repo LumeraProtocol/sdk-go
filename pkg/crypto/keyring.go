@@ -27,6 +27,7 @@ import (
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
+	evmigrationtypes "github.com/LumeraProtocol/lumera/x/evmigration/types"
 	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
 )
 
@@ -266,6 +267,7 @@ func NewDefaultTxConfig() client.TxConfig {
 	banktypes.RegisterInterfaces(reg)
 	claimtypes.RegisterInterfaces(reg)
 	distributiontypes.RegisterInterfaces(reg)
+	evmigrationtypes.RegisterInterfaces(reg)
 	stakingtypes.RegisterInterfaces(reg)
 	supernodetypes.RegisterInterfaces(reg)
 
