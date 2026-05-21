@@ -23,6 +23,11 @@ import (
 type EVMClient struct {
 	query  evmtypes.QueryClient
 	client *Client // backref for tx helpers (nil for query-only tests)
+
+	// Lumera precompile wrappers. Each routes through this EVMClient.
+	Action    *PrecompileClient
+	Supernode *PrecompileClient
+	Wasm      *PrecompileClient
 }
 
 // Code returns the EVM bytecode deployed at addr.

@@ -14,10 +14,13 @@ import (
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
 	evmigrationtypes "github.com/LumeraProtocol/lumera/x/evmigration/types"
 	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
+	"github.com/LumeraProtocol/sdk-go/pkg/evm/precompiles"
 	erc20types "github.com/cosmos/evm/x/erc20/types"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // Config mirrors the base blockchain config for Lumera-specific usage.
@@ -91,5 +94,12 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 	}
 	c.EVM.client = c
 	c.ERC20.client = c
+	c.EVM.Action = newPrecompileClient(c.EVM, precompiles.ActionAddress, precompiles.ActionABI)
+	c.EVM.Supernode = newPrecompileClient(c.EVM, precompiles.SupernodeAddress, precompiles.SupernodeABI)
+	c.EVM.Wasm = newPrecompileClient(c.EVM, precompiles.WasmAddress, precompiles.WasmABI)
 	return c, nil
+}
+
+func newPrecompileClient(evm *EVMClient, addr common.Address, parsed abi.ABI) *PrecompileClient {
+	return &PrecompileClient{address: addr, abi: parsed, evm: evm}
 }
