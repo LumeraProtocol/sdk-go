@@ -57,7 +57,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 	}
 
 	conn := baseClient.GRPCConn()
-	return &Client{
+	c := &Client{
 		Client: baseClient,
 		Action: &ActionClient{
 			query: actiontypes.NewQueryClient(conn),
@@ -83,5 +83,7 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		PreciseBank: &PreciseBankClient{
 			query: precisebanktypes.NewQueryClient(conn),
 		},
-	}, nil
+	}
+	c.EVM.client = c
+	return c, nil
 }

@@ -20,6 +20,7 @@ import (
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -250,6 +251,29 @@ func TestBuildAndSignTxWithOptions_QueriesAccountInfoAndSimulates(t *testing.T) 
 	simCalls, acctCalls := handler.counts()
 	if simCalls != 1 || acctCalls != 1 {
 		t.Fatalf("unexpected query/simulate call counts: simulate=%d account_info=%d", simCalls, acctCalls)
+	}
+}
+
+func TestValidateTxBuildOptions_RejectsMsgEthereumTx(t *testing.T) {
+	kr, _ := newSigningTestKeyring(t, "alice")
+	c := &Client{
+		keyring: kr,
+		keyName: "alice",
+		config: Config{
+			ChainID:    "lumera-devnet-1",
+			AccountHRP: constants.LumeraAccountHRP,
+			FeeDenom:   "ulume",
+			GasPrice:   sdkmath.LegacyMustNewDecFromStr("0.025"),
+		},
+	}
+	_, err := c.BuildAndSignTxWithOptions(context.Background(), TxBuildOptions{
+		Messages: []sdk.Msg{&evmtypes.MsgEthereumTx{}},
+	})
+	if err == nil {
+		t.Fatalf("expected error rejecting MsgEthereumTx")
+	}
+	if !strings.Contains(err.Error(), "EVMClient.SendEthereumTransaction") {
+		t.Fatalf("expected guard error, got %v", err)
 	}
 }
 

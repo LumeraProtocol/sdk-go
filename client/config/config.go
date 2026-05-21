@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -37,6 +38,13 @@ type Config struct {
 
 	// Logger is optional; when set, SDK operations emit diagnostics.
 	Logger *zap.Logger
+
+	// EVM settings (cosmos/evm). Set when the chain has EVM enabled.
+	EVMChainID       *big.Int // EIP-155 chain ID (distinct from cosmos ChainID)
+	EVMNativeDenom   string   // cosmos/evm `evm_denom` (Lumera: "ulume")
+	EVMExtendedDenom string   // 18-decimal precisebank denom (Lumera: "alume")
+	EVMGasTipCap     *big.Int // optional default tip cap (alume/gas)
+	EVMGasFeeCap     *big.Int // optional default fee cap (alume/gas)
 }
 
 // WaitTxConfig configures how the SDK waits for transaction inclusion.

@@ -221,6 +221,11 @@ func (c *Client) validateTxBuildOptions(opts TxBuildOptions) error {
 			return fmt.Errorf("gas price is required")
 		}
 	}
+	for _, msg := range opts.Messages {
+		if sdk.MsgTypeURL(msg) == "/cosmos.evm.vm.v1.MsgEthereumTx" {
+			return fmt.Errorf("MsgEthereumTx must use EVMClient.SendEthereumTransaction; the cosmos signing pipeline rejects it")
+		}
+	}
 	return nil
 }
 

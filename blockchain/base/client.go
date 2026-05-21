@@ -91,6 +91,21 @@ func (c *Client) GRPCConn() *grpc.ClientConn {
 	return c.conn
 }
 
+// Keyring returns the keyring used for signing.
+func (c *Client) Keyring() keyring.Keyring {
+	return c.keyring
+}
+
+// KeyName returns the key uid used for signing.
+func (c *Client) KeyName() string {
+	return c.keyName
+}
+
+// Cfg returns a copy of the base client configuration.
+func (c *Client) Cfg() Config {
+	return c.config
+}
+
 // shouldUseTLS determines if TLS should be used based on the gRPC address.
 func shouldUseTLS(addr string) bool {
 	// Check for explicit port 443 (standard HTTPS/gRPC-TLS port).

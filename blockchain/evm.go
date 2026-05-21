@@ -6,15 +6,23 @@ import (
 	"fmt"
 	"math/big"
 
+	"encoding/hex"
+
+	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
-// EVMClient provides x/vm module query operations. Tx helpers
-// (SendEthereumTransaction, DeployContract, CallContract) land in Phase 3.
+// EVMClient provides x/vm module query operations plus high-level Ethereum
+// transaction helpers (SendEthereumTransaction, DeployContract, CallContract,
+// RawEthereumTx).
 type EVMClient struct {
-	query evmtypes.QueryClient
+	query  evmtypes.QueryClient
+	client *Client // backref for tx helpers (nil for query-only tests)
 }
 
 // Code returns the EVM bytecode deployed at addr.
@@ -159,6 +167,318 @@ func (c *EVMClient) TraceTx(ctx context.Context, req *evmtypes.QueryTraceTxReque
 		return nil, nil
 	}
 	return resp.Data, nil
+}
+
+// -------- Transaction Helpers --------
+
+// EthereumTxOptions overrides defaults pulled from chain state.
+type EthereumTxOptions struct {
+	Nonce      *uint64   // default: query EthAccount
+	GasLimit   uint64    // default: EstimateGas + 20% buffer
+	GasTipCap  *big.Int  // default: feemarket MinGasPrice (alume/gas)
+	GasFeeCap  *big.Int  // default: BaseFee * 2 + tipCap (alume/gas)
+	Value      *big.Int  // default: 0 (alume)
+	AccessList ethtypes.AccessList
+	Memo       string // unused for EVM-path txs; reserved for future
+}
+
+// EthereumTransactionResult captures the outcome of an Ethereum-format tx.
+type EthereumTransactionResult struct {
+	EthTxHash  common.Hash
+	CosmosHash string
+	Height     int64
+	GasUsed    uint64
+	VMError    string
+	ReturnData []byte
+	Logs       []*evmtypes.Log
+}
+
+// SendEthereumTransaction signs and broadcasts an Ethereum-format tx using
+// the client's key. Pulls nonce, gas, and fees from chain when not set.
+// Waits for inclusion. Returns both the eth tx hash and cosmos hash so
+// callers can correlate.
+//
+// to=nil deploys a contract; pass DeployContract for that case.
+func (c *EVMClient) SendEthereumTransaction(
+	ctx context.Context,
+	to *common.Address,
+	data []byte,
+	opts *EthereumTxOptions,
+) (*EthereumTransactionResult, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("EVMClient not wired to a base.Client (constructed standalone)")
+	}
+	cfg := c.client.Cfg()
+	if cfg.EVMChainID == nil || cfg.EVMChainID.Sign() <= 0 {
+		return nil, fmt.Errorf("EVMChainID is required to send Ethereum transactions")
+	}
+	keyName := c.client.KeyName()
+	if keyName == "" {
+		return nil, fmt.Errorf("base client has no KeyName")
+	}
+	if opts == nil {
+		opts = &EthereumTxOptions{}
+	}
+
+	from, err := sdkcrypto.EVMAddressFromKey(c.client.Keyring(), keyName)
+	if err != nil {
+		return nil, fmt.Errorf("derive sender address: %w", err)
+	}
+	sender := common.HexToAddress(from)
+
+	value := opts.Value
+	if value == nil {
+		value = new(big.Int)
+	}
+
+	nonce, err := c.resolveNonce(ctx, sender, opts.Nonce)
+	if err != nil {
+		return nil, fmt.Errorf("resolve nonce: %w", err)
+	}
+
+	gasLimit, err := c.resolveGasLimit(ctx, sender, to, data, value, opts.GasLimit)
+	if err != nil {
+		return nil, fmt.Errorf("resolve gas limit: %w", err)
+	}
+
+	tipCap, feeCap, err := c.resolveGasCaps(ctx, opts.GasTipCap, opts.GasFeeCap)
+	if err != nil {
+		return nil, fmt.Errorf("resolve gas caps: %w", err)
+	}
+
+	tx := ethtypes.NewTx(&ethtypes.DynamicFeeTx{
+		ChainID:    cfg.EVMChainID,
+		Nonce:      nonce,
+		GasTipCap:  tipCap,
+		GasFeeCap:  feeCap,
+		Gas:        gasLimit,
+		To:         to,
+		Value:      value,
+		Data:       data,
+		AccessList: opts.AccessList,
+	})
+
+	signed, err := sdkcrypto.SignEthereumTx(c.client.Keyring(), keyName, cfg.EVMChainID, tx)
+	if err != nil {
+		return nil, fmt.Errorf("sign tx: %w", err)
+	}
+
+	return c.RawEthereumTx(ctx, signed)
+}
+
+// DeployContract is sugar over SendEthereumTransaction for contract creation.
+// Returns the deployed contract address derived from sender+nonce per EIP-161.
+func (c *EVMClient) DeployContract(
+	ctx context.Context,
+	bytecode []byte,
+	opts *EthereumTxOptions,
+) (common.Address, *EthereumTransactionResult, error) {
+	res, err := c.SendEthereumTransaction(ctx, nil, bytecode, opts)
+	if err != nil {
+		return common.Address{}, nil, err
+	}
+	// Recover sender from the signed tx the client just broadcast. Since we
+	// don't keep the signed tx around, derive sender from keyring instead.
+	from, err := sdkcrypto.EVMAddressFromKey(c.client.Keyring(), c.client.KeyName())
+	if err != nil {
+		return common.Address{}, res, err
+	}
+	// Look up the resolved nonce: tx.Nonce was set above, but we only return
+	// the receipt. The deployed address is keccak(rlp([sender, nonce-1])) —
+	// we need the nonce used. Re-derive via EthAccount: the post-tx nonce is
+	// one higher, so subtract 1.
+	acct, err := c.EthAccount(ctx, common.HexToAddress(from))
+	if err != nil {
+		return common.Address{}, res, fmt.Errorf("look up post-tx nonce: %w", err)
+	}
+	if acct == nil || acct.Nonce == 0 {
+		return common.Address{}, res, fmt.Errorf("unexpected nonce 0 after deployment")
+	}
+	addr := ethCreateAddress(common.HexToAddress(from), acct.Nonce-1)
+	return addr, res, nil
+}
+
+// CallContract is a read-only call (forwards to EthCall).
+func (c *EVMClient) CallContract(
+	ctx context.Context,
+	to common.Address,
+	data []byte,
+) ([]byte, error) {
+	var from common.Address
+	if c.client != nil && c.client.KeyName() != "" {
+		hex, err := sdkcrypto.EVMAddressFromKey(c.client.Keyring(), c.client.KeyName())
+		if err == nil {
+			from = common.HexToAddress(hex)
+		}
+	}
+	resp, err := c.EthCall(ctx, from, &to, data, 0)
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil {
+		return nil, nil
+	}
+	if resp.VmError != "" {
+		return resp.Ret, fmt.Errorf("vm error: %s", resp.VmError)
+	}
+	return resp.Ret, nil
+}
+
+// RawEthereumTx broadcasts a pre-signed go-ethereum transaction unchanged.
+// For callers bringing their own signer (e.g. hardware wallet).
+func (c *EVMClient) RawEthereumTx(
+	ctx context.Context,
+	signed *ethtypes.Transaction,
+) (*EthereumTransactionResult, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("EVMClient not wired to a base.Client")
+	}
+	cfg := c.client.Cfg()
+	if cfg.EVMChainID == nil {
+		return nil, fmt.Errorf("EVMChainID required to encode MsgEthereumTx")
+	}
+
+	txBytes, err := buildEthereumTxBytes(signed, cfg.EVMNativeDenom, cfg.EVMExtendedDenom, cfg.FeeDenom)
+	if err != nil {
+		return nil, err
+	}
+
+	cosmosHash, getResp, err := c.client.BroadcastAndWait(ctx, txBytes, txtypes.BroadcastMode_BROADCAST_MODE_SYNC)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast tx: %w", err)
+	}
+
+	res := &EthereumTransactionResult{
+		EthTxHash:  signed.Hash(),
+		CosmosHash: cosmosHash,
+	}
+	if getResp != nil && getResp.TxResponse != nil {
+		res.Height = getResp.TxResponse.Height
+		res.GasUsed = uint64(getResp.TxResponse.GasUsed)
+		if data := getResp.TxResponse.Data; len(data) > 0 {
+			if decoded, derr := decodeMsgEthereumTxResponses([]byte(data)); derr == nil && len(decoded) > 0 {
+				res.ReturnData = decoded[0].Ret
+				res.VMError = decoded[0].VmError
+				res.Logs = decoded[0].Logs
+			}
+		}
+	}
+	return res, nil
+}
+
+func (c *EVMClient) resolveNonce(ctx context.Context, sender common.Address, override *uint64) (uint64, error) {
+	if override != nil {
+		return *override, nil
+	}
+	acct, err := c.EthAccount(ctx, sender)
+	if err != nil {
+		return 0, err
+	}
+	if acct == nil {
+		return 0, nil
+	}
+	return acct.Nonce, nil
+}
+
+func (c *EVMClient) resolveGasLimit(ctx context.Context, from common.Address, to *common.Address, data []byte, value *big.Int, override uint64) (uint64, error) {
+	if override > 0 {
+		return override, nil
+	}
+	estimate, err := c.EstimateGas(ctx, from, to, data, value, 0)
+	if err != nil {
+		return 0, err
+	}
+	if estimate == 0 {
+		return 0, fmt.Errorf("gas estimator returned 0")
+	}
+	// 20% buffer.
+	buffer := estimate / 5
+	return estimate + buffer, nil
+}
+
+func (c *EVMClient) resolveGasCaps(ctx context.Context, tipOverride, feeOverride *big.Int) (*big.Int, *big.Int, error) {
+	cfg := c.client.Cfg()
+	tip := tipOverride
+	if tip == nil {
+		tip = cfg.EVMGasTipCap
+	}
+	if tip == nil {
+		mg, err := c.GlobalMinGasPrice(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("global min gas price: %w", err)
+		}
+		tip = mg
+	}
+	fee := feeOverride
+	if fee == nil {
+		fee = cfg.EVMGasFeeCap
+	}
+	if fee == nil {
+		base, err := c.BaseFee(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("base fee: %w", err)
+		}
+		// feeCap = base*2 + tip
+		fee = new(big.Int).Add(new(big.Int).Mul(base, big.NewInt(2)), tip)
+	}
+	if tip.Sign() < 0 || fee.Sign() < 0 {
+		return nil, nil, fmt.Errorf("gas caps must be non-negative")
+	}
+	if tip.Cmp(fee) > 0 {
+		return nil, nil, fmt.Errorf("tip cap %s exceeds fee cap %s", tip, fee)
+	}
+	return tip, fee, nil
+}
+
+// buildEthereumTxBytes wraps a signed Ethereum tx as a MsgEthereumTx, builds
+// the cosmos envelope with the EVM extension option and the correct fee/gas,
+// and returns the encoded bytes ready for broadcast. nativeDenom and
+// extendedDenom default to feeDenom when empty.
+func buildEthereumTxBytes(signed *ethtypes.Transaction, nativeDenom, extendedDenom, feeDenom string) ([]byte, error) {
+	msg, err := sdkcrypto.WrapAsMsgEthereumTx(signed)
+	if err != nil {
+		return nil, fmt.Errorf("wrap MsgEthereumTx: %w", err)
+	}
+
+	if nativeDenom == "" {
+		nativeDenom = feeDenom
+	}
+	if extendedDenom == "" {
+		extendedDenom = nativeDenom
+	}
+
+	txCfg := sdkcrypto.NewDefaultTxConfig()
+	builder := txCfg.NewTxBuilder()
+	if _, err := msg.BuildTxWithEvmParams(builder, evmtypes.Params{
+		EvmDenom: nativeDenom,
+		ExtendedDenomOptions: &evmtypes.ExtendedDenomOptions{
+			ExtendedDenom: extendedDenom,
+		},
+	}); err != nil {
+		return nil, fmt.Errorf("build cosmos envelope: %w", err)
+	}
+
+	txBytes, err := txCfg.TxEncoder()(builder.GetTx())
+	if err != nil {
+		return nil, fmt.Errorf("encode tx: %w", err)
+	}
+	return txBytes, nil
+}
+
+// decodeMsgEthereumTxResponses extracts MsgEthereumTxResponse entries from a
+// cosmos TxResponse.Data field. The data is a hex-encoded TxMsgData proto.
+func decodeMsgEthereumTxResponses(data []byte) ([]*evmtypes.MsgEthereumTxResponse, error) {
+	raw, err := hex.DecodeString(string(data))
+	if err != nil {
+		return nil, err
+	}
+	return evmtypes.DecodeTxResponses(raw)
+}
+
+// ethCreateAddress computes the deployed contract address for sender+nonce
+// using the standard CREATE rule: keccak256(rlp([sender, nonce]))[12:].
+func ethCreateAddress(sender common.Address, nonce uint64) common.Address {
+	return ethcrypto.CreateAddress(sender, nonce)
 }
 
 func encodeEthCallArgs(from common.Address, to *common.Address, data []byte, value *big.Int) ([]byte, error) {
