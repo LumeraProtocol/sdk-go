@@ -14,6 +14,7 @@ import (
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
 	evmigrationtypes "github.com/LumeraProtocol/lumera/x/evmigration/types"
 	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
+	erc20types "github.com/cosmos/evm/x/erc20/types"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
@@ -35,6 +36,7 @@ type Client struct {
 
 	// EVM module clients (cosmos/evm)
 	EVM         *EVMClient
+	ERC20       *ERC20Client
 	FeeMarket   *FeeMarketClient
 	PreciseBank *PreciseBankClient
 }
@@ -77,6 +79,9 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		EVM: &EVMClient{
 			query: evmtypes.NewQueryClient(conn),
 		},
+		ERC20: &ERC20Client{
+			query: erc20types.NewQueryClient(conn),
+		},
 		FeeMarket: &FeeMarketClient{
 			query: feemarkettypes.NewQueryClient(conn),
 		},
@@ -85,5 +90,6 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		},
 	}
 	c.EVM.client = c
+	c.ERC20.client = c
 	return c, nil
 }
