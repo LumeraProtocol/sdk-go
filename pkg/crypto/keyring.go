@@ -24,6 +24,10 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	evmcryptocodec "github.com/cosmos/evm/crypto/codec"
 	evmhd "github.com/cosmos/evm/crypto/hd"
+	erc20types "github.com/cosmos/evm/x/erc20/types"
+	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
+	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
+	vmtypes "github.com/cosmos/evm/x/vm/types"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
@@ -268,6 +272,10 @@ func NewDefaultTxConfig() client.TxConfig {
 	claimtypes.RegisterInterfaces(reg)
 	distributiontypes.RegisterInterfaces(reg)
 	evmigrationtypes.RegisterInterfaces(reg)
+	erc20types.RegisterInterfaces(reg)
+	feemarkettypes.RegisterInterfaces(reg)
+	precisebanktypes.RegisterInterfaces(reg)
+	vmtypes.RegisterInterfaces(reg)
 	stakingtypes.RegisterInterfaces(reg)
 	supernodetypes.RegisterInterfaces(reg)
 
