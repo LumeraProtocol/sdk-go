@@ -125,6 +125,13 @@ The ICA controller supports this via the `HostKeyName` config field (see Tutoria
 addr, err := sdkcrypto.AddressFromKey(kr, "alice", "lumera")
 ```
 
+For EVM keys (`KeyTypeEVM`), `EVMAddressFromKey` returns the 0x-prefixed EIP-55 hex address. The key must be `eth_secp256k1`; passing a Cosmos secp256k1 key returns an error.
+
+```go
+hexAddr, err := sdkcrypto.EVMAddressFromKey(kr, "host-key")
+// e.g. 0xAbC1234...
+```
+
 ## Tutorials
 
 ### 1) Query actions (read-only)
@@ -238,7 +245,32 @@ if err != nil { log.Fatal(err) }
 
 See `examples/ica-request-tx` for a full CLI that builds the ICA packet and prints the JSON.
 
-### 7) Manage SuperNodes
+### 7) EVM migration (legacy account / validator)
+
+The `evmigration` module covers the one-time migration of a pre-EVM (coin type 118) account or validator to the EVM-enabled (coin type 60) chain. Use the query helpers for pre-flight checks, then submit a migration tx signed by the new address.
+
+```go
+// Pre-flight: confirm the migration would succeed and inspect what is touched.
+est, err := lumera.Blockchain.EVMigration.MigrationEstimate(ctx, legacyAddr)
+if err != nil { log.Fatal(err) }
+if !est.WouldSucceed {
+    log.Fatalf("cannot migrate: %s", est.RejectionReason)
+}
+
+// Build proofs (legacy + new key) externally, then submit:
+msg := blockchain.NewMsgClaimLegacyAccount(newAddr, legacyAddr, legacyProof, newProof)
+res, err := lumera.Blockchain.ClaimLegacyAccountTx(ctx, msg, "migrate")
+if err != nil { log.Fatal(err) }
+log.Printf("migrated legacy=%s new=%s tx=%s height=%d", res.LegacyAddress, res.NewAddress, res.TxHash, res.Height)
+
+// Validators use MigrateValidatorTx instead:
+vmsg := blockchain.NewMsgMigrateValidator(newAddr, legacyAddr, legacyProof, newProof)
+_, err = lumera.Blockchain.MigrateValidatorTx(ctx, vmsg, "")
+```
+
+Read-only helpers: `MigrationRecord(legacyAddress)`, `MigrationRecordByNewAddress(newAddress)`, `MigrationStats(ctx)`, and `Params(ctx)`. `MigrationProof` construction is chain-specific and out of scope here — see the `x/evmigration` proto definitions for the required fields.
+
+### 8) Manage SuperNodes
 
 Registration/updates use `lumera.Blockchain.SuperNode` transaction helpers:
 

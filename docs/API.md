@@ -31,7 +31,10 @@ This is a concise map of the exported Go surface. For full GoDoc see `pkg.go.dev
   - Queries: `GetSuperNode`, `GetSuperNodeBySuperNodeAddress`, `ListSuperNodes`, `GetTopSuperNodesForBlock`, `GetTopSuperNodesForBlockWithOptions`, `Params`.
   - Tx helpers: `RegisterSupernodeTx`, `DeregisterSupernodeTx`, `StartSupernodeTx`, `StopSupernodeTx`, `UpdateSupernodeTx`, `UpdateSuperNodeParamsTx`. Message constructors mirror these names.
 - Claim and Audit modules: query clients are wired; add methods as the chain exposes additional endpoints.
-- Shared tx utilities: `BuildAndSignTx`, `Simulate`, `Broadcast`, `WaitForTxInclusion`, `GetTx`, `ExtractEventAttribute` (for parsing event attributes like `action_id`).
+- EVMigration module:
+  - Queries: `Params`, `MigrationRecord`, `MigrationRecordByNewAddress`, `MigrationEstimate`, `MigrationStats`.
+  - Tx helpers: `ClaimLegacyAccountTx`, `MigrateValidatorTx`. Message constructors: `NewMsgClaimLegacyAccount`, `NewMsgMigrateValidator`. Result type: `MigrationResult` (legacy/new address, tx hash, height).
+- Shared tx utilities: `BuildAndSignTx`, `BuildAndSignTxWithGasAdjustment`, `BuildAndSignTxWithOptions`, `PrepareTx` + `SignPreparedTx`, `Simulate`, `Broadcast`, `BroadcastAndWait`, `WaitForTxInclusion`, `GetTx`, `GetTxsByEvents`, `ExtractEventAttribute` (for parsing event attributes like `action_id`).
 
 ## Package `types`
 
@@ -49,7 +52,8 @@ Crypto helpers for keyring management, key import, address derivation, and trans
 - `LoadKeyring(keyName, mnemonicFile string, keyType KeyType) (keyring.Keyring, []byte, string, error)`: creates a test keyring and imports a mnemonic with the given key type; returns the keyring, pubkey bytes, and Lumera address.
 - `ImportKey(kr keyring.Keyring, keyName, mnemonicFile, hrp string, keyType KeyType) ([]byte, string, error)`: imports a mnemonic into an existing keyring under the given key name and key type; returns pubkey bytes and address for the specified HRP.
 - `AddressFromKey(kr, keyName, hrp) (string, error)`: derives an HRP-specific bech32 address from a keyring key without mutating global config.
-- `NewDefaultTxConfig() client.TxConfig`: builds a protobuf tx config with Lumera action and crypto interfaces registered.
+- `EVMAddressFromKey(kr, keyName) (string, error)`: derives the 0x-prefixed EIP-55 hex address for an `eth_secp256k1` key; returns an error for `secp256k1` keys.
+- `NewDefaultTxConfig() client.TxConfig`: builds a protobuf tx config with Lumera action and crypto interfaces plus the EVM modules (`evmigration`, `erc20`, `feemarket`, `precisebank`, `vm`) registered.
 - `SignTxWithKeyring(kr, keyName, chainID string, txBuilder, txConfig) ([]byte, error)`: signs a transaction using Cosmos SDK builders.
 
 ## Package `ica`
