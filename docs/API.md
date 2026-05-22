@@ -1,6 +1,17 @@
 # Lumera Go SDK – API Overview
 
-This is a concise map of the exported Go surface. For full GoDoc see `pkg.go.dev/github.com/LumeraProtocol/sdk-go`.
+This is a concise map of the exported Go surface. For task-oriented tutorials see the [Developer Guide](DEVELOPER_GUIDE.md). For full GoDoc see `pkg.go.dev/github.com/LumeraProtocol/sdk-go`.
+
+Quick links by topic:
+
+| Topic | Guide | Packages |
+| --- | --- | --- |
+| Setup / configuration | [Getting Started](guides/getting-started.md) | `client`, `client/config` |
+| Keys / signing | [Crypto](guides/crypto.md) | `pkg/crypto` |
+| Actions, SuperNodes | [Actions](guides/actions.md) | `blockchain` |
+| Cascade storage | [Cascade](guides/cascade.md) | `cascade` |
+| Interchain Accounts | [ICA](guides/ica.md) | `ica` |
+| EVM, ERC20, precompiles | [EVM](guides/evm.md) | `blockchain`, `pkg/evm/precompiles` |
 
 ## Package `client`
 
