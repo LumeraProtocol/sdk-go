@@ -7,12 +7,12 @@ import (
 	"testing"
 
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
-	evmtypes "github.com/cosmos/evm/x/vm/types"
-	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"github.com/ethereum/go-ethereum/common"
-	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,6 +82,27 @@ func TestBuildEthereumTxBytes_RoundTrip(t *testing.T) {
 	// internally — if it were missing the ante handler would reject the tx
 	// on-chain. Decoding via the standard TxDecoder already verified the
 	// envelope is well-formed.
+}
+
+func TestBuildEthereumTxBytes_RequiresExtendedDenom(t *testing.T) {
+	mnemonicFile := writeMnemonicForEVM(t)
+	kr, _, _, err := sdkcrypto.LoadKeyring("alice", mnemonicFile, sdkcrypto.KeyTypeEVM)
+	require.NoError(t, err)
+
+	chainID := big.NewInt(1414)
+	tx := ethtypes.NewTx(&ethtypes.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     3,
+		GasTipCap: big.NewInt(500_000_000),
+		GasFeeCap: big.NewInt(2_500_000_000),
+		Gas:       50_000,
+	})
+	signed, err := sdkcrypto.SignEthereumTx(kr, "alice", chainID, tx)
+	require.NoError(t, err)
+
+	_, err = buildEthereumTxBytes(signed, "ulume", "", "ulume")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "extended denom")
 }
 
 type codecAny = any

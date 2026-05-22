@@ -47,6 +47,33 @@ func TestWasmABI_HasCoreMethods(t *testing.T) {
 	}
 }
 
+func TestWasmABI_ExecuteIsPhase1NonPayable(t *testing.T) {
+	execute := WasmABI.Methods["execute"]
+	require.Equal(t, "nonpayable", execute.StateMutability)
+	require.False(t, execute.Payable)
+	require.Len(t, execute.Inputs, 2)
+	require.Equal(t, "contractAddr", execute.Inputs[0].Name)
+	require.Equal(t, "string", execute.Inputs[0].Type.String())
+	require.Equal(t, "msg", execute.Inputs[1].Name)
+	require.Equal(t, "bytes", execute.Inputs[1].Type.String())
+}
+
+func TestSupernodeABI_RegisterUsesStringAddresses(t *testing.T) {
+	register := SupernodeABI.Methods["registerSupernode"]
+	require.Len(t, register.Inputs, 4)
+	for _, input := range register.Inputs {
+		require.Equal(t, "string", input.Type.String(), "input %s should remain a bech32/string field", input.Name)
+	}
+}
+
+func TestActionABI_FeeAmountsAreUint256(t *testing.T) {
+	getActionFee := ActionABI.Methods["getActionFee"]
+	require.Len(t, getActionFee.Outputs, 3)
+	for _, output := range getActionFee.Outputs {
+		require.Equal(t, "uint256", output.Type.String(), "output %s should remain an integer ulume amount", output.Name)
+	}
+}
+
 func TestPackUnpack_RoundTrip(t *testing.T) {
 	// getParams takes no args, returns one struct. Just verify Pack does
 	// not error and produces a 4-byte selector.

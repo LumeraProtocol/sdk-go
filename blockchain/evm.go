@@ -2,19 +2,19 @@ package blockchain
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
-
-	"encoding/hex"
+	"strings"
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 )
 
 // EVMClient provides x/vm module query operations plus high-level Ethereum
@@ -178,11 +178,11 @@ func (c *EVMClient) TraceTx(ctx context.Context, req *evmtypes.QueryTraceTxReque
 
 // EthereumTxOptions overrides defaults pulled from chain state.
 type EthereumTxOptions struct {
-	Nonce      *uint64   // default: query EthAccount
-	GasLimit   uint64    // default: EstimateGas + 20% buffer
-	GasTipCap  *big.Int  // default: feemarket MinGasPrice (alume/gas)
-	GasFeeCap  *big.Int  // default: BaseFee * 2 + tipCap (alume/gas)
-	Value      *big.Int  // default: 0 (alume)
+	Nonce      *uint64  // default: query EthAccount
+	GasLimit   uint64   // default: EstimateGas + 20% buffer
+	GasTipCap  *big.Int // default: feemarket MinGasPrice scaled to alume/gas
+	GasFeeCap  *big.Int // default: BaseFee * 2 + tipCap (alume/gas)
+	Value      *big.Int // default: 0 (alume)
 	AccessList ethtypes.AccessList
 	Memo       string // unused for EVM-path txs; reserved for future
 }
@@ -278,28 +278,32 @@ func (c *EVMClient) DeployContract(
 	bytecode []byte,
 	opts *EthereumTxOptions,
 ) (common.Address, *EthereumTransactionResult, error) {
+	if c.client == nil {
+		return common.Address{}, nil, fmt.Errorf("EVMClient not wired to a base.Client (constructed standalone)")
+	}
+	if opts == nil {
+		opts = &EthereumTxOptions{}
+	} else {
+		copied := *opts
+		opts = &copied
+	}
+
+	from, err := sdkcrypto.EVMAddressFromKey(c.client.Keyring(), c.client.KeyName())
+	if err != nil {
+		return common.Address{}, nil, fmt.Errorf("derive sender address: %w", err)
+	}
+	sender := common.HexToAddress(from)
+	nonce, err := c.resolveNonce(ctx, sender, opts.Nonce)
+	if err != nil {
+		return common.Address{}, nil, fmt.Errorf("resolve nonce: %w", err)
+	}
+
+	opts.Nonce = &nonce
+	addr := ethCreateAddress(sender, nonce)
 	res, err := c.SendEthereumTransaction(ctx, nil, bytecode, opts)
 	if err != nil {
 		return common.Address{}, nil, err
 	}
-	// Recover sender from the signed tx the client just broadcast. Since we
-	// don't keep the signed tx around, derive sender from keyring instead.
-	from, err := sdkcrypto.EVMAddressFromKey(c.client.Keyring(), c.client.KeyName())
-	if err != nil {
-		return common.Address{}, res, err
-	}
-	// Look up the resolved nonce: tx.Nonce was set above, but we only return
-	// the receipt. The deployed address is keccak(rlp([sender, nonce-1])) —
-	// we need the nonce used. Re-derive via EthAccount: the post-tx nonce is
-	// one higher, so subtract 1.
-	acct, err := c.EthAccount(ctx, common.HexToAddress(from))
-	if err != nil {
-		return common.Address{}, res, fmt.Errorf("look up post-tx nonce: %w", err)
-	}
-	if acct == nil || acct.Nonce == 0 {
-		return common.Address{}, res, fmt.Errorf("unexpected nonce 0 after deployment")
-	}
-	addr := ethCreateAddress(common.HexToAddress(from), acct.Nonce-1)
 	return addr, res, nil
 }
 
@@ -343,7 +347,12 @@ func (c *EVMClient) RawEthereumTx(
 		return nil, fmt.Errorf("EVMChainID required to encode MsgEthereumTx")
 	}
 
-	txBytes, err := buildEthereumTxBytes(signed, cfg.EVMNativeDenom, cfg.EVMExtendedDenom, cfg.FeeDenom)
+	nativeDenom, extendedDenom, err := c.resolveEVMDenoms(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	txBytes, err := buildEthereumTxBytes(signed, nativeDenom, extendedDenom, cfg.FeeDenom)
 	if err != nil {
 		return nil, err
 	}
@@ -408,9 +417,9 @@ func (c *EVMClient) resolveGasCaps(ctx context.Context, tipOverride, feeOverride
 		tip = cfg.EVMGasTipCap
 	}
 	if tip == nil {
-		mg, err := c.GlobalMinGasPrice(ctx)
+		mg, err := c.resolveMinGasTipCap(ctx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("global min gas price: %w", err)
+			return nil, nil, fmt.Errorf("min gas price: %w", err)
 		}
 		tip = mg
 	}
@@ -435,10 +444,55 @@ func (c *EVMClient) resolveGasCaps(ctx context.Context, tipOverride, feeOverride
 	return tip, fee, nil
 }
 
+func (c *EVMClient) resolveMinGasTipCap(ctx context.Context) (*big.Int, error) {
+	if c.client == nil || c.client.FeeMarket == nil {
+		return nil, fmt.Errorf("feemarket client is required")
+	}
+	params, err := c.client.FeeMarket.Params(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if params == nil {
+		return nil, fmt.Errorf("empty feemarket params response")
+	}
+	return sdkcrypto.ULumeDecToWei(params.Params.MinGasPrice)
+}
+
+func (c *EVMClient) resolveEVMDenoms(ctx context.Context, cfg Config) (string, string, error) {
+	nativeDenom := strings.TrimSpace(cfg.EVMNativeDenom)
+	extendedDenom := strings.TrimSpace(cfg.EVMExtendedDenom)
+	if nativeDenom != "" && extendedDenom != "" {
+		return nativeDenom, extendedDenom, nil
+	}
+
+	if c.query == nil {
+		return "", "", fmt.Errorf("EVMNativeDenom and EVMExtendedDenom are required when EVM params query client is unavailable")
+	}
+	resp, err := c.Params(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("query EVM params: %w", err)
+	}
+	if resp != nil {
+		if nativeDenom == "" {
+			nativeDenom = strings.TrimSpace(resp.Params.EvmDenom)
+		}
+		if extendedDenom == "" && resp.Params.ExtendedDenomOptions != nil {
+			extendedDenom = strings.TrimSpace(resp.Params.ExtendedDenomOptions.ExtendedDenom)
+		}
+	}
+
+	if nativeDenom == "" {
+		return "", "", fmt.Errorf("EVM native denom is required")
+	}
+	if extendedDenom == "" {
+		return "", "", fmt.Errorf("EVM extended denom is required")
+	}
+	return nativeDenom, extendedDenom, nil
+}
+
 // buildEthereumTxBytes wraps a signed Ethereum tx as a MsgEthereumTx, builds
 // the cosmos envelope with the EVM extension option and the correct fee/gas,
-// and returns the encoded bytes ready for broadcast. nativeDenom and
-// extendedDenom default to feeDenom when empty.
+// and returns the encoded bytes ready for broadcast.
 func buildEthereumTxBytes(signed *ethtypes.Transaction, nativeDenom, extendedDenom, feeDenom string) ([]byte, error) {
 	msg, err := sdkcrypto.WrapAsMsgEthereumTx(signed)
 	if err != nil {
@@ -449,7 +503,7 @@ func buildEthereumTxBytes(signed *ethtypes.Transaction, nativeDenom, extendedDen
 		nativeDenom = feeDenom
 	}
 	if extendedDenom == "" {
-		extendedDenom = nativeDenom
+		return nil, fmt.Errorf("EVM extended denom is required")
 	}
 
 	txCfg := sdkcrypto.NewDefaultTxConfig()

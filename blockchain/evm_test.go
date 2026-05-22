@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	sdkmath "cosmossdk.io/math"
+	blockbase "github.com/LumeraProtocol/sdk-go/blockchain/base"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
@@ -178,6 +179,66 @@ func TestEVMClient_BaseFee_Nil(t *testing.T) {
 	}
 	if bf.Sign() != 0 {
 		t.Fatalf("expected zero, got %s", bf)
+	}
+}
+
+func TestEVMClient_ResolveGasCaps_UsesFeeMarketMinGasPrice(t *testing.T) {
+	ctx := context.Background()
+	baseClient, err := blockbase.New(ctx, blockbase.Config{
+		GRPCAddr:       "localhost:9090",
+		EVMChainID:     big.NewInt(1414),
+		EVMNativeDenom: "ulume",
+	}, nil, "")
+	if err != nil {
+		t.Fatalf("base.New: %v", err)
+	}
+	t.Cleanup(func() { _ = baseClient.Close() })
+
+	minGasPrice := sdkmath.LegacyMustNewDecFromStr("0.0005")
+	client := &Client{
+		Client: baseClient,
+		FeeMarket: &FeeMarketClient{query: &stubFeeMarketQuery{
+			params: &feemarkettypes.QueryParamsResponse{
+				Params: feemarkettypes.Params{MinGasPrice: minGasPrice},
+			},
+		}},
+	}
+	baseFee := sdkmath.NewInt(2_500_000_000)
+	evm := &EVMClient{
+		client: client,
+		query: &stubEVMQuery{
+			baseFeeResp: &evmtypes.QueryBaseFeeResponse{BaseFee: &baseFee},
+		},
+	}
+
+	tip, fee, err := evm.resolveGasCaps(ctx, nil, nil)
+	if err != nil {
+		t.Fatalf("resolveGasCaps: %v", err)
+	}
+	if tip.String() != "500000000" {
+		t.Fatalf("tip cap = %s, want 500000000", tip)
+	}
+	if fee.String() != "5500000000" {
+		t.Fatalf("fee cap = %s, want 5500000000", fee)
+	}
+}
+
+func TestEVMClient_ResolveEVMDenoms_QueryParamsWhenConfigMissing(t *testing.T) {
+	evm := &EVMClient{query: &stubEVMQuery{
+		paramsResp: &evmtypes.QueryParamsResponse{Params: evmtypes.Params{
+			EvmDenom: "ulume",
+			ExtendedDenomOptions: &evmtypes.ExtendedDenomOptions{
+				ExtendedDenom: "alume",
+			},
+		}},
+	}}
+
+	nativeDenom, extendedDenom, err := evm.resolveEVMDenoms(context.Background(), Config{})
+	if err != nil {
+		t.Fatalf("resolveEVMDenoms: %v", err)
+	}
+	if nativeDenom != "ulume" || extendedDenom != "alume" {
+		t.Fatalf("denoms = %q/%q, want ulume/alume", nativeDenom, extendedDenom)
 	}
 }
 

@@ -66,7 +66,7 @@ func SignEthereumTx(
 }
 
 // WrapAsMsgEthereumTx packages a signed go-ethereum tx as a cosmos
-// MsgEthereumTx ready for MsgEthereumTx.BuildTx and broadcast.
+// MsgEthereumTx ready for MsgEthereumTx.BuildTxWithEvmParams and broadcast.
 func WrapAsMsgEthereumTx(signed *ethtypes.Transaction) (*evmtypes.MsgEthereumTx, error) {
 	if signed == nil {
 		return nil, fmt.Errorf("signed tx is required")

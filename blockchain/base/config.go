@@ -28,8 +28,9 @@ type Config struct {
 	EVMChainID *big.Int
 
 	// EVMNativeDenom is the cosmos/evm `evm_denom` parameter — the bank denom
-	// fees are deducted in (Lumera: "ulume"). Used by MsgEthereumTx.BuildTx
-	// when constructing the cosmos fee coin from the inner Ethereum tx.
+	// fees are deducted in (Lumera: "ulume"). Used by
+	// MsgEthereumTx.BuildTxWithEvmParams when constructing the cosmos fee coin
+	// from the inner Ethereum tx.
 	EVMNativeDenom string
 
 	// EVMExtendedDenom is the 18-decimal precisebank denom (Lumera: "alume").
