@@ -277,6 +277,25 @@ func TestValidateTxBuildOptions_RejectsMsgEthereumTx(t *testing.T) {
 	}
 }
 
+func TestResolveFeeAmount_LargeGasDoesNotOverflow(t *testing.T) {
+	c := &Client{config: Config{
+		FeeDenom: "ulume",
+		GasPrice: sdkmath.LegacyOneDec(),
+	}}
+
+	gas := ^uint64(0)
+	fees, err := c.resolveFeeAmount(gas, TxBuildOptions{})
+	if err != nil {
+		t.Fatalf("resolveFeeAmount: %v", err)
+	}
+	if len(fees) != 1 || fees[0].Denom != "ulume" {
+		t.Fatalf("unexpected fees: %s", fees)
+	}
+	if !fees[0].Amount.Equal(sdkmath.NewIntFromUint64(gas)) {
+		t.Fatalf("fee amount = %s, want %s", fees[0].Amount, sdkmath.NewIntFromUint64(gas))
+	}
+}
+
 func TestNewAppliesDefaultMessageSizes(t *testing.T) {
 	c, err := New(context.Background(), Config{GRPCAddr: "localhost:9090"}, nil, "")
 	if err != nil {

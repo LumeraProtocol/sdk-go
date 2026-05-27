@@ -99,7 +99,7 @@ func (c *EVMClient) BaseFee(ctx context.Context) (*big.Int, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil || resp.BaseFee == nil {
+	if resp == nil || resp.BaseFee == nil || resp.BaseFee.IsNil() {
 		return new(big.Int), nil
 	}
 	bf := *resp.BaseFee
@@ -117,7 +117,7 @@ func (c *EVMClient) GlobalMinGasPrice(ctx context.Context) (*big.Int, error) {
 	if err != nil {
 		return nil, err
 	}
-	if resp == nil {
+	if resp == nil || resp.MinGasPrice.IsNil() {
 		return new(big.Int), nil
 	}
 	return resp.MinGasPrice.BigInt(), nil
@@ -234,6 +234,9 @@ func (c *EVMClient) SendEthereumTransaction(
 	value := opts.Value
 	if value == nil {
 		value = new(big.Int)
+	}
+	if value.Sign() < 0 {
+		return nil, fmt.Errorf("value must be non-negative")
 	}
 
 	nonce, err := c.resolveNonce(ctx, sender, opts.Nonce)
@@ -370,7 +373,11 @@ func (c *EVMClient) RawEthereumTx(
 		res.Height = getResp.TxResponse.Height
 		res.GasUsed = uint64(getResp.TxResponse.GasUsed)
 		if data := getResp.TxResponse.Data; len(data) > 0 {
-			if decoded, derr := decodeMsgEthereumTxResponses([]byte(data)); derr == nil && len(decoded) > 0 {
+			decoded, derr := decodeMsgEthereumTxResponses([]byte(data))
+			if derr != nil {
+				return nil, fmt.Errorf("decode EVM tx response: %w", derr)
+			}
+			if len(decoded) > 0 {
 				res.ReturnData = decoded[0].Ret
 				res.VMError = decoded[0].VmError
 				res.Logs = decoded[0].Logs
@@ -527,7 +534,8 @@ func buildEthereumTxBytes(signed *ethtypes.Transaction, nativeDenom, extendedDen
 // decodeMsgEthereumTxResponses extracts MsgEthereumTxResponse entries from a
 // cosmos TxResponse.Data field. The data is a hex-encoded TxMsgData proto.
 func decodeMsgEthereumTxResponses(data []byte) ([]*evmtypes.MsgEthereumTxResponse, error) {
-	raw, err := hex.DecodeString(string(data))
+	encoded := strings.TrimPrefix(string(data), "0x")
+	raw, err := hex.DecodeString(encoded)
 	if err != nil {
 		return nil, err
 	}
@@ -550,6 +558,9 @@ func encodeEthCallArgs(from common.Address, to *common.Address, data []byte, val
 		args.Input = &input
 	}
 	if value != nil {
+		if value.Sign() < 0 {
+			return nil, fmt.Errorf("value must be non-negative")
+		}
 		args.Value = (*hexutil.Big)(value)
 	}
 	return json.Marshal(args)

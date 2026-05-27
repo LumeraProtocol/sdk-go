@@ -2,16 +2,19 @@ package blockchain
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"math/big"
 	"testing"
 
 	sdkmath "cosmossdk.io/math"
 	blockbase "github.com/LumeraProtocol/sdk-go/blockchain/base"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"google.golang.org/grpc"
@@ -180,6 +183,28 @@ func TestEVMClient_BaseFee_Nil(t *testing.T) {
 	if bf.Sign() != 0 {
 		t.Fatalf("expected zero, got %s", bf)
 	}
+
+	nilBaseFee := sdkmath.Int{}
+	stub.baseFeeResp = &evmtypes.QueryBaseFeeResponse{BaseFee: &nilBaseFee}
+	bf, err = c.BaseFee(context.Background())
+	if err != nil {
+		t.Fatalf("BaseFee with nil sdk.Int: %v", err)
+	}
+	if bf.Sign() != 0 {
+		t.Fatalf("expected zero for nil sdk.Int, got %s", bf)
+	}
+}
+
+func TestEVMClient_GlobalMinGasPrice_NilInt(t *testing.T) {
+	stub := &stubEVMQuery{globalMinResp: &evmtypes.QueryGlobalMinGasPriceResponse{}}
+	c := &EVMClient{query: stub}
+	got, err := c.GlobalMinGasPrice(context.Background())
+	if err != nil {
+		t.Fatalf("GlobalMinGasPrice: %v", err)
+	}
+	if got.Sign() != 0 {
+		t.Fatalf("expected zero, got %s", got)
+	}
 }
 
 func TestEVMClient_ResolveGasCaps_UsesFeeMarketMinGasPrice(t *testing.T) {
@@ -239,6 +264,32 @@ func TestEVMClient_ResolveEVMDenoms_QueryParamsWhenConfigMissing(t *testing.T) {
 	}
 	if nativeDenom != "ulume" || extendedDenom != "alume" {
 		t.Fatalf("denoms = %q/%q, want ulume/alume", nativeDenom, extendedDenom)
+	}
+}
+
+func TestEncodeEthCallArgs_RejectsNegativeValue(t *testing.T) {
+	_, err := encodeEthCallArgs(common.Address{}, nil, nil, big.NewInt(-1))
+	if err == nil {
+		t.Fatalf("expected negative value error")
+	}
+}
+
+func TestDecodeMsgEthereumTxResponses_AcceptsHexPrefix(t *testing.T) {
+	want := &evmtypes.MsgEthereumTxResponse{Ret: []byte{0x01, 0x02}}
+	txData := &sdk.TxMsgData{
+		MsgResponses: []*codectypes.Any{codectypes.UnsafePackAny(want)},
+	}
+	raw, err := proto.Marshal(txData)
+	if err != nil {
+		t.Fatalf("marshal tx data: %v", err)
+	}
+
+	got, err := decodeMsgEthereumTxResponses([]byte("0x" + hex.EncodeToString(raw)))
+	if err != nil {
+		t.Fatalf("decode tx responses: %v", err)
+	}
+	if len(got) != 1 || !equalBytes(got[0].Ret, want.Ret) {
+		t.Fatalf("decoded response mismatch: %+v", got)
 	}
 }
 
