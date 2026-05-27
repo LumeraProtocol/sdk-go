@@ -7,6 +7,7 @@ import (
 	"time"
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
+	sdkmath "cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -304,7 +305,7 @@ func (c *Client) resolveFeeAmount(gas uint64, opts TxBuildOptions) (sdk.Coins, e
 	if !opts.FeeAmount.Empty() {
 		return opts.FeeAmount, nil
 	}
-	feeDec := c.config.GasPrice.MulInt64(int64(gas)).Ceil().TruncateInt()
+	feeDec := c.config.GasPrice.MulInt(sdkmath.NewIntFromUint64(gas)).Ceil().TruncateInt()
 	return sdk.NewCoins(sdk.NewCoin(c.config.FeeDenom, feeDec)), nil
 }
 

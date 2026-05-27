@@ -7,7 +7,7 @@ replace (
 	// Local development - uncomment these for local testing
 	// Comment these lines before releasing
 	//github.com/LumeraProtocol/lumera => ../lumera
-	github.com/LumeraProtocol/supernode/v2 => ../supernode
+	//github.com/LumeraProtocol/supernode/v2 => ../supernode
 	github.com/envoyproxy/protoc-gen-validate => github.com/bufbuild/protoc-gen-validate v1.3.0
 	// cosmos/evm requires a forked go-ethereum with custom EVM operation methods
 	github.com/ethereum/go-ethereum => github.com/cosmos/go-ethereum v1.16.2-cosmos-1
