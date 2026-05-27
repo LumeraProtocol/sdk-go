@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/LumeraProtocol/lumera/config"
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
 	sdkEvent "github.com/LumeraProtocol/sdk-go/cascade/event"
