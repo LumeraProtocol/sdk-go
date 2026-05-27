@@ -8,7 +8,6 @@ import (
 
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -70,14 +69,6 @@ func TestBuildEthereumTxBytes_RoundTrip(t *testing.T) {
 
 	// Extension option must be ExtensionOptionsEthereumTx so the dual-route
 	// ante handler picks the EVM path.
-	extTx, ok := decoded.(authtx.ExtensionOptionsTxBuilder)
-	_ = extTx
-	_ = ok
-	// authtx.ExtensionOptionsTxBuilder is the builder interface, not on the
-	// decoded tx. Instead reach via the protoTx ExtensionOptions accessor.
-	type extOptioner interface {
-		GetExtensionOptions() []*codecAny
-	}
 	// Skip explicit assertion: the BuildTxWithEvmParams call sets the option
 	// internally — if it were missing the ante handler would reject the tx
 	// on-chain. Decoding via the standard TxDecoder already verified the
@@ -104,8 +95,6 @@ func TestBuildEthereumTxBytes_RequiresExtendedDenom(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "extended denom")
 }
-
-type codecAny = any
 
 func TestEthCreateAddress_MatchesGoEthereum(t *testing.T) {
 	sender := common.HexToAddress("0x1234567890123456789012345678901234567890")

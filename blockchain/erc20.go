@@ -114,7 +114,7 @@ func (c *Client) ConvertCoinToERC20(
 	if c == nil || c.Client == nil {
 		return nil, fmt.Errorf("client not initialized")
 	}
-	sender, err := sdkcrypto.AddressFromKey(c.Client.Keyring(), c.Client.KeyName(), c.Client.Cfg().AccountHRP)
+	sender, err := sdkcrypto.AddressFromKey(c.Keyring(), c.KeyName(), c.Cfg().AccountHRP)
 	if err != nil {
 		return nil, fmt.Errorf("derive sender address: %w", err)
 	}
@@ -136,7 +136,7 @@ func (c *Client) ConvertERC20ToCoin(
 	if c == nil || c.Client == nil {
 		return nil, fmt.Errorf("client not initialized")
 	}
-	senderHex, err := sdkcrypto.EVMAddressFromKey(c.Client.Keyring(), c.Client.KeyName())
+	senderHex, err := sdkcrypto.EVMAddressFromKey(c.Keyring(), c.KeyName())
 	if err != nil {
 		return nil, fmt.Errorf("derive sender 0x address: %w", err)
 	}
@@ -154,7 +154,7 @@ func (c *Client) RegisterERC20Tx(
 	contracts []common.Address,
 	memo string,
 ) (string, error) {
-	signer, err := sdkcrypto.AddressFromKey(c.Client.Keyring(), c.Client.KeyName(), c.Client.Cfg().AccountHRP)
+	signer, err := sdkcrypto.AddressFromKey(c.Keyring(), c.KeyName(), c.Cfg().AccountHRP)
 	if err != nil {
 		return "", fmt.Errorf("derive signer: %w", err)
 	}

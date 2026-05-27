@@ -63,7 +63,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("close client: %v", err)
+		}
+	}()
 
 	bc := client.Blockchain
 

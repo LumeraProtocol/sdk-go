@@ -1,8 +1,8 @@
 // erc20-convert exercises Lumera's ERC20 conversion flow in both directions.
 // Direction is controlled by --mode:
 //
-//   coin-to-erc20: wraps ulume coins as ERC20 tokens at the configured 0x receiver
-//   erc20-to-coin: unwraps ERC20 tokens back to ulume at the configured bech32 receiver
+//	coin-to-erc20: wraps ulume coins as ERC20 tokens at the configured 0x receiver
+//	erc20-to-coin: unwraps ERC20 tokens back to ulume at the configured bech32 receiver
 //
 // The signing key must be eth_secp256k1 so the 0x sender derivation matches
 // Lumera's account semantics.
@@ -61,7 +61,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("close client: %v", err)
+		}
+	}()
 
 	switch *mode {
 	case "coin-to-erc20":

@@ -1,8 +1,8 @@
 // precompile-action invokes Lumera's action precompile at 0x0901 through the
 // SDK's generic PrecompileClient. Two modes:
 //
-//   get-params   reads x/action params via Call (read-only, no signature)
-//   approve      sends approveAction(actionID) via Send (signed, broadcast)
+//	get-params   reads x/action params via Call (read-only, no signature)
+//	approve      sends approveAction(actionID) via Send (signed, broadcast)
 //
 // The published ABI lives at pkg/evm/precompiles/abi/action.json — the
 // embedded copy here is the same artifact, parsed at SDK init.
@@ -57,7 +57,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("close client: %v", err)
+		}
+	}()
 
 	action := client.Blockchain.EVM.Action
 	log.Printf("precompile address: %s", action.Address().Hex())

@@ -21,8 +21,8 @@ import (
 	"math/big"
 
 	sdkmath "cosmossdk.io/math"
-	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
 	"github.com/LumeraProtocol/sdk-go/blockchain"
+	lumerasdk "github.com/LumeraProtocol/sdk-go/client"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -72,7 +72,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("create client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Printf("close client: %v", err)
+		}
+	}()
 
 	recipient := common.HexToAddress(*to)
 	value := sdkcrypto.Wei(sdkmath.NewInt(*amountULume))
