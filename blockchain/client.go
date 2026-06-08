@@ -7,12 +7,21 @@ import (
 	sdkmath "cosmossdk.io/math"
 	"github.com/LumeraProtocol/sdk-go/blockchain/base"
 	"github.com/LumeraProtocol/sdk-go/constants"
+	sdkgrpc "github.com/LumeraProtocol/sdk-go/internal/grpc"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	//audittypes "github.com/LumeraProtocol/lumera/x/audit/types"
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
+	evmigrationtypes "github.com/LumeraProtocol/lumera/x/evmigration/types"
 	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
+	"github.com/LumeraProtocol/sdk-go/pkg/evm/precompiles"
+	erc20types "github.com/cosmos/evm/x/erc20/types"
+	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
+	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // Config mirrors the base blockchain config for Lumera-specific usage.
@@ -23,10 +32,17 @@ type Client struct {
 	*base.Client
 
 	// Module-specific clients
-	Action    *ActionClient
-	SuperNode *SuperNodeClient
-	Claim     *ClaimClient
-	Audit     *AuditClient
+	Action      *ActionClient
+	SuperNode   *SuperNodeClient
+	Claim       *ClaimClient
+	EVMigration *EVMigrationClient
+	Audit       *AuditClient
+
+	// EVM module clients (cosmos/evm)
+	EVM         *EVMClient
+	ERC20       *ERC20Client
+	FeeMarket   *FeeMarketClient
+	PreciseBank *PreciseBankClient
 }
 
 // New creates a new Lumera blockchain client.
@@ -47,19 +63,45 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 	}
 
 	conn := baseClient.GRPCConn()
-	return &Client{
+	gogoConn := sdkgrpc.GogoClientConn(conn)
+	c := &Client{
 		Client: baseClient,
 		Action: &ActionClient{
-			query: actiontypes.NewQueryClient(conn),
+			query: actiontypes.NewQueryClient(gogoConn),
 		},
 		SuperNode: &SuperNodeClient{
-			query: supernodetypes.NewQueryClient(conn),
+			query: supernodetypes.NewQueryClient(gogoConn),
 		},
 		Claim: &ClaimClient{
-			query: claimtypes.NewQueryClient(conn),
+			query: claimtypes.NewQueryClient(gogoConn),
+		},
+		EVMigration: &EVMigrationClient{
+			query: evmigrationtypes.NewQueryClient(gogoConn),
 		},
 		Audit: &AuditClient{
 			//query: audittypes.NewQueryClient(conn),
 		},
-	}, nil
+		EVM: &EVMClient{
+			query: evmtypes.NewQueryClient(gogoConn),
+		},
+		ERC20: &ERC20Client{
+			query: erc20types.NewQueryClient(gogoConn),
+		},
+		FeeMarket: &FeeMarketClient{
+			query: feemarkettypes.NewQueryClient(gogoConn),
+		},
+		PreciseBank: &PreciseBankClient{
+			query: precisebanktypes.NewQueryClient(gogoConn),
+		},
+	}
+	c.EVM.client = c
+	c.ERC20.client = c
+	c.EVM.Action = newPrecompileClient(c.EVM, precompiles.ActionAddress, precompiles.ActionABI)
+	c.EVM.Supernode = newPrecompileClient(c.EVM, precompiles.SupernodeAddress, precompiles.SupernodeABI)
+	c.EVM.Wasm = newPrecompileClient(c.EVM, precompiles.WasmAddress, precompiles.WasmABI)
+	return c, nil
+}
+
+func newPrecompileClient(evm *EVMClient, addr common.Address, parsed abi.ABI) *PrecompileClient {
+	return &PrecompileClient{address: addr, abi: parsed, evm: evm}
 }

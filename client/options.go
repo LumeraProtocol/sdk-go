@@ -1,8 +1,10 @@
 package client
 
 import (
+	"math/big"
 	"time"
 
+	sdkmath "cosmossdk.io/math"
 	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 	"go.uber.org/zap"
 )
@@ -85,5 +87,61 @@ func WithLogLevel(level string) Option {
 func WithLogger(logger *zap.Logger) Option {
 	return func(c *Config) {
 		c.Logger = logger
+	}
+}
+
+// WithAccountHRP sets the bech32 account address prefix (e.g. "lumera").
+// Empty leaves the Lumera default applied by blockchain.New.
+func WithAccountHRP(hrp string) Option {
+	return func(c *Config) {
+		c.AccountHRP = hrp
+	}
+}
+
+// WithFeeDenom sets the cosmos fee denom used for non-EVM transactions
+// (e.g. "ulume"). Empty leaves the Lumera default applied by blockchain.New.
+func WithFeeDenom(denom string) Option {
+	return func(c *Config) {
+		c.FeeDenom = denom
+	}
+}
+
+// WithGasPrice sets the gas price in FeeDenom/gas (e.g. 0.025). A nil/zero
+// LegacyDec leaves the Lumera default applied by blockchain.New.
+func WithGasPrice(price sdkmath.LegacyDec) Option {
+	return func(c *Config) {
+		c.GasPrice = price
+	}
+}
+
+// WithEVMChainID sets the EIP-155 chain ID used for Ethereum-format
+// transactions. Distinct from the Cosmos ChainID. Required for EVM tx helpers.
+func WithEVMChainID(id *big.Int) Option {
+	return func(c *Config) {
+		c.EVMChainID = id
+	}
+}
+
+// WithEVMNativeDenom sets the cosmos/evm `evm_denom` (e.g. "ulume").
+func WithEVMNativeDenom(denom string) Option {
+	return func(c *Config) {
+		c.EVMNativeDenom = denom
+	}
+}
+
+// WithEVMExtendedDenom sets the 18-decimal precisebank denom (e.g. "alume").
+func WithEVMExtendedDenom(denom string) Option {
+	return func(c *Config) {
+		c.EVMExtendedDenom = denom
+	}
+}
+
+// WithEVMGasCaps sets optional defaults for EIP-1559 gas pricing in the
+// extended denom's integer unit (alume/gas). Nil means "fetch from chain
+// state at tx time".
+func WithEVMGasCaps(tip, fee *big.Int) Option {
+	return func(c *Config) {
+		c.EVMGasTipCap = tip
+		c.EVMGasFeeCap = fee
 	}
 }

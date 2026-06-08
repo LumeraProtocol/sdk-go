@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/LumeraProtocol/sdk-go/constants"
-	sdkethsecp256k1 "github.com/LumeraProtocol/sdk-go/pkg/crypto/ethsecp256k1"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -20,8 +20,23 @@ import (
 	"github.com/cosmos/cosmos-sdk/std"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
+	authztypes "github.com/cosmos/cosmos-sdk/x/authz"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	distributiontypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	evmcryptocodec "github.com/cosmos/evm/crypto/codec"
+	"github.com/cosmos/evm/crypto/ethsecp256k1"
+	evmhd "github.com/cosmos/evm/crypto/hd"
+	erc20types "github.com/cosmos/evm/x/erc20/types"
+	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
+	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
+	vmtypes "github.com/cosmos/evm/x/vm/types"
+	"github.com/cosmos/gogoproto/proto"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
+	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
+	evmigrationtypes "github.com/LumeraProtocol/lumera/x/evmigration/types"
+	supernodetypes "github.com/LumeraProtocol/lumera/x/supernode/v1/types"
 )
 
 const (
@@ -65,15 +80,11 @@ func (kt KeyType) HDPath() string {
 func (kt KeyType) SigningAlgo() keyring.SignatureAlgo {
 	switch kt {
 	case KeyTypeEVM:
-		return ethSecp256k1Alg
+		return evmhd.EthSecp256k1
 	default:
 		return hd.Secp256k1
 	}
 }
-
-var (
-	ethSecp256k1Alg = ethSecp256k1Algo{}
-)
 
 // KeyringParams holds configuration for initializing a Cosmos keyring.
 type KeyringParams struct {
@@ -123,12 +134,9 @@ func NewKeyring(p KeyringParams) (keyring.Keyring, error) {
 		in = bufio.NewReader(os.Stdin)
 	}
 
-	registry := codectypes.NewInterfaceRegistry()
-	std.RegisterInterfaces(registry)
-	sdkethsecp256k1.RegisterInterfaces(registry)
-	cdc := codec.NewProtoCodec(registry)
+	cdc := codec.NewProtoCodec(newInterfaceRegistry())
 
-	return keyring.New(app, backend, dir, in, cdc, ethSecp256k1Option())
+	return keyring.New(app, backend, dir, in, cdc, evmhd.EthSecp256k1Option())
 }
 
 // GetKey returns metadata for the named key in the provided keyring.
@@ -231,6 +239,17 @@ func ImportKey(kr keyring.Keyring, keyName, mnemonicFile, hrp string, keyType Ke
 			return nil, "", fmt.Errorf("key %q already exists with algorithm %s, but %s (%s) was requested",
 				keyName, pub.Type(), keyType.String(), wantAlgo)
 		}
+		// Verify the existing key was derived from the supplied mnemonic.
+		// Without this check, importing a different mnemonic under an existing
+		// name would silently return the stored key's pubkey/address, leaving
+		// the caller operating on the wrong account.
+		derivedPub, err := pubKeyFromMnemonic(mnemonic, keyType)
+		if err != nil {
+			return nil, "", fmt.Errorf("derive pubkey from mnemonic: %w", err)
+		}
+		if !bytes.Equal(derivedPub.Bytes(), pub.Bytes()) {
+			return nil, "", fmt.Errorf("key %q already exists with a different mnemonic", keyName)
+		}
 	}
 
 	addr, err := AddressFromKey(kr, keyName, hrp)
@@ -254,14 +273,63 @@ func ImportKey(kr keyring.Keyring, keyName, mnemonicFile, hrp string, keyType Ke
 // NewDefaultTxConfig constructs a client.TxConfig backed by a protobuf codec,
 // registering Lumera action message interfaces as required for signing/encoding.
 func NewDefaultTxConfig() client.TxConfig {
+	proto := codec.NewProtoCodec(newInterfaceRegistry())
+	return authtx.NewTxConfig(proto, authtx.DefaultSignModes)
+}
+
+func newInterfaceRegistry() codectypes.InterfaceRegistry {
 	reg := codectypes.NewInterfaceRegistry()
 	// Register crypto and module interfaces
+	std.RegisterInterfaces(reg)
 	cryptocodec.RegisterInterfaces(reg)
-	sdkethsecp256k1.RegisterInterfaces(reg)
+	evmcryptocodec.RegisterInterfaces(reg)
+	registerLegacyEthSecp256k1TypeURLs(reg)
+	authztypes.RegisterInterfaces(reg)
 	actiontypes.RegisterInterfaces(reg)
+	banktypes.RegisterInterfaces(reg)
+	claimtypes.RegisterInterfaces(reg)
+	distributiontypes.RegisterInterfaces(reg)
+	evmigrationtypes.RegisterInterfaces(reg)
+	erc20types.RegisterInterfaces(reg)
+	feemarkettypes.RegisterInterfaces(reg)
+	precisebanktypes.RegisterInterfaces(reg)
+	vmtypes.RegisterInterfaces(reg)
+	stakingtypes.RegisterInterfaces(reg)
+	supernodetypes.RegisterInterfaces(reg)
 
-	proto := codec.NewProtoCodec(reg)
-	return authtx.NewTxConfig(proto, authtx.DefaultSignModes)
+	return reg
+}
+
+func registerLegacyEthSecp256k1TypeURLs(reg codectypes.InterfaceRegistry) {
+	custom, ok := reg.(interface {
+		RegisterCustomTypeURL(any, string, proto.Message)
+	})
+	if !ok {
+		panic("interface registry does not support custom type URLs")
+	}
+	custom.RegisterCustomTypeURL(
+		(*cryptotypes.PubKey)(nil),
+		"/injective.crypto.v1beta1.ethsecp256k1.PubKey",
+		&ethsecp256k1.PubKey{},
+	)
+	custom.RegisterCustomTypeURL(
+		(*cryptotypes.PrivKey)(nil),
+		"/injective.crypto.v1beta1.ethsecp256k1.PrivKey",
+		&ethsecp256k1.PrivKey{},
+	)
+}
+
+// pubKeyFromMnemonic derives the public key for the given mnemonic and key
+// type without persisting anything to a keyring. It uses the same signing
+// algorithm and HD path that ImportKey/LoadKeyring use, so the result matches
+// a key created via kr.NewAccount with the same inputs.
+func pubKeyFromMnemonic(mnemonic string, keyType KeyType) (cryptotypes.PubKey, error) {
+	algo := keyType.SigningAlgo()
+	derivedPriv, err := algo.Derive()(mnemonic, "", keyType.HDPath())
+	if err != nil {
+		return nil, fmt.Errorf("derive private key: %w", err)
+	}
+	return algo.Generate()(derivedPriv).PubKey(), nil
 }
 
 func readMnemonicFile(mnemonicFile string) (string, error) {
@@ -274,30 +342,4 @@ func readMnemonicFile(mnemonicFile string) (string, error) {
 		return "", fmt.Errorf("mnemonic file is empty")
 	}
 	return mnemonic, nil
-}
-
-func ethSecp256k1Option() keyring.Option {
-	return func(options *keyring.Options) {
-		options.SupportedAlgos = keyring.SigningAlgoList{ethSecp256k1Alg, hd.Secp256k1}
-		options.SupportedAlgosLedger = keyring.SigningAlgoList{ethSecp256k1Alg, hd.Secp256k1}
-	}
-}
-
-type ethSecp256k1Algo struct{}
-
-func (s ethSecp256k1Algo) Name() hd.PubKeyType {
-	return hd.PubKeyType(sdkethsecp256k1.KeyType)
-}
-
-func (s ethSecp256k1Algo) Derive() hd.DeriveFn {
-	// Reuse Cosmos derivation function with Ethereum BIP44 path.
-	return hd.Secp256k1.Derive()
-}
-
-func (s ethSecp256k1Algo) Generate() hd.GenerateFn {
-	return func(bz []byte) cryptotypes.PrivKey {
-		bzArr := make([]byte, sdkethsecp256k1.PrivKeySize)
-		copy(bzArr, bz)
-		return &sdkethsecp256k1.PrivKey{Key: bzArr}
-	}
 }

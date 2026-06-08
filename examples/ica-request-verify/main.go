@@ -20,7 +20,7 @@ import (
 	"github.com/LumeraProtocol/sdk-go/constants"
 	"github.com/LumeraProtocol/sdk-go/ica"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
-	"github.com/LumeraProtocol/sdk-go/pkg/crypto/ethsecp256k1"
+	"github.com/cosmos/evm/crypto/ethsecp256k1"
 	sdktypes "github.com/LumeraProtocol/sdk-go/types"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"

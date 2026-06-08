@@ -8,16 +8,31 @@ import (
 	"testing"
 
 	"github.com/LumeraProtocol/sdk-go/constants"
-	sdkethsecp256k1 "github.com/LumeraProtocol/sdk-go/pkg/crypto/ethsecp256k1"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/evm/crypto/ethsecp256k1"
 	"github.com/cosmos/go-bip39"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/require"
 )
 
 var testMnemonic = func() string {
 	entropy := make([]byte, 32)
+	mnemonic, err := bip39.NewMnemonic(entropy)
+	if err != nil {
+		panic(err)
+	}
+	return mnemonic
+}()
+
+// secondTestMnemonic is a valid mnemonic distinct from testMnemonic, used to
+// verify ImportKey rejects re-importing a different seed under an existing name.
+var secondTestMnemonic = func() string {
+	entropy := make([]byte, 32)
+	entropy[31] = 1
 	mnemonic, err := bip39.NewMnemonic(entropy)
 	if err != nil {
 		panic(err)
@@ -41,7 +56,7 @@ func TestKeyType_HDPath(t *testing.T) {
 
 func TestKeyType_SigningAlgo(t *testing.T) {
 	require.Equal(t, hd.Secp256k1.Name(), KeyTypeCosmos.SigningAlgo().Name())
-	require.Equal(t, hd.PubKeyType(sdkethsecp256k1.KeyType), KeyTypeEVM.SigningAlgo().Name())
+	require.Equal(t, hd.PubKeyType(ethsecp256k1.KeyType), KeyTypeEVM.SigningAlgo().Name())
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +100,7 @@ func TestNewKeyring_SupportsBothAlgos(t *testing.T) {
 	require.NoError(t, err)
 	pk2, err := rec2.GetPubKey()
 	require.NoError(t, err)
-	require.Equal(t, sdkethsecp256k1.KeyType, pk2.Type())
+	require.Equal(t, ethsecp256k1.KeyType, pk2.Type())
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +155,7 @@ func TestLoadKeyring_EVM(t *testing.T) {
 	require.NoError(t, err)
 	pk, err := rec.GetPubKey()
 	require.NoError(t, err)
-	require.Equal(t, sdkethsecp256k1.KeyType, pk.Type())
+	require.Equal(t, ethsecp256k1.KeyType, pk.Type())
 }
 
 func TestLoadKeyring_DifferentKeyTypesDerivesDifferentAddress(t *testing.T) {
@@ -184,7 +199,7 @@ func TestImportKey_EVM(t *testing.T) {
 	require.NoError(t, err)
 	pk, err := rec.GetPubKey()
 	require.NoError(t, err)
-	require.Equal(t, sdkethsecp256k1.KeyType, pk.Type())
+	require.Equal(t, ethsecp256k1.KeyType, pk.Type())
 }
 
 // TestImportKey_MultiChain imports both Cosmos and EVM keys into a single
@@ -219,7 +234,7 @@ func TestImportKey_MultiChain(t *testing.T) {
 	require.NoError(t, err)
 	evmPK, err := evmRec.GetPubKey()
 	require.NoError(t, err)
-	require.Equal(t, sdkethsecp256k1.KeyType, evmPK.Type())
+	require.Equal(t, ethsecp256k1.KeyType, evmPK.Type())
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +258,7 @@ func TestKeyBehaviorMatrix(t *testing.T) {
 		{
 			name:        "evm",
 			keyType:     KeyTypeEVM,
-			expectedAlg: sdkethsecp256k1.KeyType,
+			expectedAlg: ethsecp256k1.KeyType,
 		},
 	}
 
@@ -354,6 +369,32 @@ func TestImportKey_KeyTypeMismatch(t *testing.T) {
 	_, _, err = ImportKey(kr, "alice", mnemonicFile, "cosmos", KeyTypeEVM)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "already exists with algorithm")
+}
+
+func TestImportKey_RejectsMnemonicMismatch(t *testing.T) {
+	for _, keyType := range []KeyType{KeyTypeCosmos, KeyTypeEVM} {
+		t.Run(keyType.String(), func(t *testing.T) {
+			kr := newTestKeyring(t)
+
+			// Import alice from the canonical test mnemonic.
+			file1 := writeMnemonicFileWith(t, testMnemonic)
+			_, addr1, err := ImportKey(kr, "alice", file1, constants.LumeraAccountHRP, keyType)
+			require.NoError(t, err)
+
+			// Re-importing the SAME mnemonic stays idempotent.
+			_, addr1b, err := ImportKey(kr, "alice", file1, constants.LumeraAccountHRP, keyType)
+			require.NoError(t, err)
+			require.Equal(t, addr1, addr1b)
+
+			// Re-importing a DIFFERENT mnemonic under the same name must error,
+			// not silently return the already-stored key's address.
+			file2 := writeMnemonicFileWith(t, secondTestMnemonic)
+			_, addr2, err := ImportKey(kr, "alice", file2, constants.LumeraAccountHRP, keyType)
+			require.Error(t, err, "expected error when re-importing a different mnemonic")
+			require.Contains(t, err.Error(), "different mnemonic")
+			require.Empty(t, addr2)
+		})
+	}
 }
 
 func TestAddressFromKey_Errors(t *testing.T) {
@@ -490,6 +531,25 @@ func TestNewDefaultTxConfig(t *testing.T) {
 	require.NotNil(t, builder)
 }
 
+func TestInterfaceRegistry_UnpacksLegacyInjectiveEthSecp256k1PubKey(t *testing.T) {
+	pub := &ethsecp256k1.PubKey{Key: []byte{
+		0x02, 0x5c, 0x9b, 0x07, 0x4e, 0x20, 0x75, 0xf2, 0x2f, 0xb4, 0x6e,
+		0x60, 0x6d, 0x9a, 0x57, 0xa1, 0x55, 0x49, 0xfa, 0xa2, 0xac, 0xad,
+		0x5b, 0x90, 0x31, 0xb6, 0x49, 0x3f, 0x06, 0x6d, 0x9b, 0x0b, 0x3f,
+	}}
+	value, err := proto.Marshal(pub)
+	require.NoError(t, err)
+
+	any := &codectypes.Any{
+		TypeUrl: "/injective.crypto.v1beta1.ethsecp256k1.PubKey",
+		Value:   value,
+	}
+	var decoded cryptotypes.PubKey
+	require.NoError(t, newInterfaceRegistry().UnpackAny(any, &decoded))
+	require.Equal(t, ethsecp256k1.KeyType, decoded.Type())
+	require.Equal(t, pub.Bytes(), decoded.Bytes())
+}
+
 func TestSignTxWithKeyring(t *testing.T) {
 	kr := newTestKeyring(t)
 	_, err := kr.NewAccount("alice", testMnemonic, "", sdk.FullFundraiserPath, hd.Secp256k1)
@@ -537,7 +597,12 @@ func newTestKeyring(t *testing.T) keyring.Keyring {
 
 func writeMnemonicFile(t *testing.T) string {
 	t.Helper()
+	return writeMnemonicFileWith(t, testMnemonic)
+}
+
+func writeMnemonicFileWith(t *testing.T, mnemonic string) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "mnemonic.txt")
-	require.NoError(t, os.WriteFile(path, []byte(testMnemonic), 0o600))
+	require.NoError(t, os.WriteFile(path, []byte(mnemonic), 0o600))
 	return path
 }

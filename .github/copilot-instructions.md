@@ -29,7 +29,7 @@
 ## Developer Workflows
 - `make sdk` (same as `make build`) compiles all packages; `make examples` or `make example-<name>` drops binaries into `build/`.
 - `make test` runs `go test -race -coverprofile=coverage.out ./...` and emits `coverage.html`; `make lint` requires `golangci-lint`.
-- Stick to Go 1.25.5 (per `go.mod`) and respect the `replace` pins for CometBFT/Cosmos; update both blockchain + SuperNode deps together when bumping versions.
+- Stick to Go 1.26.2 (per `go.mod`) and respect the `replace` pins for CometBFT/Cosmos; update both blockchain + SuperNode deps together when bumping versions.
 
 ## Conventions
 - Errors wrap context with `fmt.Errorf("context: %w", err)` so callers can unwrap lower layers.

@@ -13,6 +13,11 @@ import (
 	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 )
 
+const (
+	defaultMaxRecvMessageSize = 4 * 1024 * 1024
+	defaultMaxSendMessageSize = 50 * 1024 * 1024
+)
+
 // Client provides common Cosmos SDK gRPC and tx helpers.
 type Client struct {
 	conn    *grpc.ClientConn
@@ -23,6 +28,8 @@ type Client struct {
 
 // New creates a base blockchain client with a gRPC connection.
 func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*Client, error) {
+	applyConfigDefaults(&cfg)
+
 	// Determine if we should use TLS based on the endpoint.
 	// Use TLS if: port is 443, or hostname doesn't start with "localhost"/"127.0.0.1".
 	useTLS := shouldUseTLS(cfg.GRPCAddr)
@@ -48,8 +55,6 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 		),
 	}
 
-	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
-
 	conn, err := grpc.NewClient(cfg.GRPCAddr, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC: %w", err)
@@ -63,6 +68,19 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 	}, nil
 }
 
+func applyConfigDefaults(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	if cfg.MaxRecvMsgSize <= 0 {
+		cfg.MaxRecvMsgSize = defaultMaxRecvMessageSize
+	}
+	if cfg.MaxSendMsgSize <= 0 {
+		cfg.MaxSendMsgSize = defaultMaxSendMessageSize
+	}
+	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
+}
+
 // Close closes the underlying gRPC connection.
 func (c *Client) Close() error {
 	if c.conn != nil {
@@ -74,6 +92,21 @@ func (c *Client) Close() error {
 // GRPCConn exposes the underlying gRPC connection for specialized queries.
 func (c *Client) GRPCConn() *grpc.ClientConn {
 	return c.conn
+}
+
+// Keyring returns the keyring used for signing.
+func (c *Client) Keyring() keyring.Keyring {
+	return c.keyring
+}
+
+// KeyName returns the key uid used for signing.
+func (c *Client) KeyName() string {
+	return c.keyName
+}
+
+// Cfg returns a copy of the base client configuration.
+func (c *Client) Cfg() Config {
+	return c.config
 }
 
 // shouldUseTLS determines if TLS should be used based on the gRPC address.

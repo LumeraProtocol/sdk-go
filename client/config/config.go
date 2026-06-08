@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
+	sdkmath "cosmossdk.io/math"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -20,14 +22,21 @@ type Config struct {
 	Address string // Your cosmos address (lumera1...)
 	KeyName string // Key name in keyring
 
+	// Chain economics overrides. Empty/nil values fall back to Lumera defaults
+	// applied by blockchain.New (AccountHRP "lumera", FeeDenom "ulume",
+	// GasPrice 0.025). Set these for non-Lumera chains.
+	AccountHRP string            // bech32 account prefix (Lumera: "lumera")
+	FeeDenom   string            // cosmos fee denom for non-EVM txs (Lumera: "ulume")
+	GasPrice   sdkmath.LegacyDec // gas price in FeeDenom/gas (Lumera: 0.025)
+
 	// Timeouts
 	BlockchainTimeout time.Duration
 	StorageTimeout    time.Duration
 
 	// Optional overrides
 	MaxRetries     int
-	MaxRecvMsgSize int // Max message size for gRPC (default: 50MB)
-	MaxSendMsgSize int
+	MaxRecvMsgSize int // Max receive message size for gRPC (default: 4MB)
+	MaxSendMsgSize int // Max send message size for gRPC (default: 50MB)
 
 	// WaitTx controls transaction confirmation behaviour.
 	WaitTx WaitTxConfig
@@ -37,6 +46,13 @@ type Config struct {
 
 	// Logger is optional; when set, SDK operations emit diagnostics.
 	Logger *zap.Logger
+
+	// EVM settings (cosmos/evm). Set when the chain has EVM enabled.
+	EVMChainID       *big.Int // EIP-155 chain ID (distinct from cosmos ChainID)
+	EVMNativeDenom   string   // cosmos/evm `evm_denom` (Lumera: "ulume")
+	EVMExtendedDenom string   // 18-decimal precisebank denom (Lumera: "alume")
+	EVMGasTipCap     *big.Int // optional default tip cap (alume/gas)
+	EVMGasFeeCap     *big.Int // optional default fee cap (alume/gas)
 }
 
 // WaitTxConfig configures how the SDK waits for transaction inclusion.
@@ -94,7 +110,7 @@ func (c *Config) Validate() error {
 		c.StorageTimeout = 5 * time.Minute
 	}
 	if c.MaxRecvMsgSize == 0 {
-		c.MaxRecvMsgSize = 1024 * 1024 * 50 // 50MB
+		c.MaxRecvMsgSize = 1024 * 1024 * 4 // 4MB
 	}
 	if c.MaxSendMsgSize == 0 {
 		c.MaxSendMsgSize = 1024 * 1024 * 50 // 50MB
@@ -116,7 +132,7 @@ func Default() Config {
 		BlockchainTimeout: 10 * time.Second,
 		StorageTimeout:    5 * time.Minute,
 		MaxRetries:        3,
-		MaxRecvMsgSize:    1024 * 1024 * 50,
+		MaxRecvMsgSize:    1024 * 1024 * 4,
 		MaxSendMsgSize:    1024 * 1024 * 50,
 		LogLevel:          "error",
 		WaitTx:            DefaultWaitTxConfig(),

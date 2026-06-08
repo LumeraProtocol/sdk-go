@@ -37,13 +37,21 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, opts ...Option) (*
 
 	// Initialize blockchain client
 	blockchainClient, err := blockchain.New(ctx, blockchain.Config{
-		ChainID:        cfg.ChainID,
-		GRPCAddr:       cfg.GRPCEndpoint,
-		RPCEndpoint:    cfg.RPCEndpoint,
-		Timeout:        cfg.BlockchainTimeout,
-		MaxRecvMsgSize: cfg.MaxRecvMsgSize,
-		MaxSendMsgSize: cfg.MaxSendMsgSize,
-		WaitTx:         cfg.WaitTx,
+		ChainID:          cfg.ChainID,
+		GRPCAddr:         cfg.GRPCEndpoint,
+		RPCEndpoint:      cfg.RPCEndpoint,
+		AccountHRP:       cfg.AccountHRP,
+		FeeDenom:         cfg.FeeDenom,
+		GasPrice:         cfg.GasPrice,
+		Timeout:          cfg.BlockchainTimeout,
+		MaxRecvMsgSize:   cfg.MaxRecvMsgSize,
+		MaxSendMsgSize:   cfg.MaxSendMsgSize,
+		WaitTx:           cfg.WaitTx,
+		EVMChainID:       cfg.EVMChainID,
+		EVMNativeDenom:   cfg.EVMNativeDenom,
+		EVMExtendedDenom: cfg.EVMExtendedDenom,
+		EVMGasTipCap:     cfg.EVMGasTipCap,
+		EVMGasFeeCap:     cfg.EVMGasFeeCap,
 	}, kr, cfg.KeyName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize blockchain client: %w", err)
