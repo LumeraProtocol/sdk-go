@@ -15,6 +15,7 @@ import (
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/std"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
@@ -23,11 +24,13 @@ import (
 	distributiontypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	evmcryptocodec "github.com/cosmos/evm/crypto/codec"
+	"github.com/cosmos/evm/crypto/ethsecp256k1"
 	evmhd "github.com/cosmos/evm/crypto/hd"
 	erc20types "github.com/cosmos/evm/x/erc20/types"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
 	vmtypes "github.com/cosmos/evm/x/vm/types"
+	"github.com/cosmos/gogoproto/proto"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
 	claimtypes "github.com/LumeraProtocol/lumera/x/claim/types"
@@ -130,10 +133,7 @@ func NewKeyring(p KeyringParams) (keyring.Keyring, error) {
 		in = bufio.NewReader(os.Stdin)
 	}
 
-	registry := codectypes.NewInterfaceRegistry()
-	std.RegisterInterfaces(registry)
-	evmcryptocodec.RegisterInterfaces(registry)
-	cdc := codec.NewProtoCodec(registry)
+	cdc := codec.NewProtoCodec(newInterfaceRegistry())
 
 	return keyring.New(app, backend, dir, in, cdc, evmhd.EthSecp256k1Option())
 }
@@ -261,11 +261,17 @@ func ImportKey(kr keyring.Keyring, keyName, mnemonicFile, hrp string, keyType Ke
 // NewDefaultTxConfig constructs a client.TxConfig backed by a protobuf codec,
 // registering Lumera action message interfaces as required for signing/encoding.
 func NewDefaultTxConfig() client.TxConfig {
+	proto := codec.NewProtoCodec(newInterfaceRegistry())
+	return authtx.NewTxConfig(proto, authtx.DefaultSignModes)
+}
+
+func newInterfaceRegistry() codectypes.InterfaceRegistry {
 	reg := codectypes.NewInterfaceRegistry()
 	// Register crypto and module interfaces
 	std.RegisterInterfaces(reg)
 	cryptocodec.RegisterInterfaces(reg)
 	evmcryptocodec.RegisterInterfaces(reg)
+	registerLegacyEthSecp256k1TypeURLs(reg)
 	authztypes.RegisterInterfaces(reg)
 	actiontypes.RegisterInterfaces(reg)
 	banktypes.RegisterInterfaces(reg)
@@ -279,8 +285,26 @@ func NewDefaultTxConfig() client.TxConfig {
 	stakingtypes.RegisterInterfaces(reg)
 	supernodetypes.RegisterInterfaces(reg)
 
-	proto := codec.NewProtoCodec(reg)
-	return authtx.NewTxConfig(proto, authtx.DefaultSignModes)
+	return reg
+}
+
+func registerLegacyEthSecp256k1TypeURLs(reg codectypes.InterfaceRegistry) {
+	custom, ok := reg.(interface {
+		RegisterCustomTypeURL(any, string, proto.Message)
+	})
+	if !ok {
+		panic("interface registry does not support custom type URLs")
+	}
+	custom.RegisterCustomTypeURL(
+		(*cryptotypes.PubKey)(nil),
+		"/injective.crypto.v1beta1.ethsecp256k1.PubKey",
+		&ethsecp256k1.PubKey{},
+	)
+	custom.RegisterCustomTypeURL(
+		(*cryptotypes.PrivKey)(nil),
+		"/injective.crypto.v1beta1.ethsecp256k1.PrivKey",
+		&ethsecp256k1.PrivKey{},
+	)
 }
 
 func readMnemonicFile(mnemonicFile string) (string, error) {

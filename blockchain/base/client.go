@@ -13,7 +13,10 @@ import (
 	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 )
 
-const defaultMaxMessageSize = 50 * 1024 * 1024
+const (
+	defaultMaxRecvMessageSize = 4 * 1024 * 1024
+	defaultMaxSendMessageSize = 50 * 1024 * 1024
+)
 
 // Client provides common Cosmos SDK gRPC and tx helpers.
 type Client struct {
@@ -70,10 +73,10 @@ func applyConfigDefaults(cfg *Config) {
 		return
 	}
 	if cfg.MaxRecvMsgSize <= 0 {
-		cfg.MaxRecvMsgSize = defaultMaxMessageSize
+		cfg.MaxRecvMsgSize = defaultMaxRecvMessageSize
 	}
 	if cfg.MaxSendMsgSize <= 0 {
-		cfg.MaxSendMsgSize = defaultMaxMessageSize
+		cfg.MaxSendMsgSize = defaultMaxSendMessageSize
 	}
 	clientconfig.ApplyWaitTxDefaults(&cfg.WaitTx)
 }

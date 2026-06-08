@@ -7,6 +7,7 @@ import (
 	sdkmath "cosmossdk.io/math"
 	"github.com/LumeraProtocol/sdk-go/blockchain/base"
 	"github.com/LumeraProtocol/sdk-go/constants"
+	sdkgrpc "github.com/LumeraProtocol/sdk-go/internal/grpc"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 
 	actiontypes "github.com/LumeraProtocol/lumera/x/action/v1/types"
@@ -62,34 +63,35 @@ func New(ctx context.Context, cfg Config, kr keyring.Keyring, keyName string) (*
 	}
 
 	conn := baseClient.GRPCConn()
+	gogoConn := sdkgrpc.GogoClientConn(conn)
 	c := &Client{
 		Client: baseClient,
 		Action: &ActionClient{
-			query: actiontypes.NewQueryClient(conn),
+			query: actiontypes.NewQueryClient(gogoConn),
 		},
 		SuperNode: &SuperNodeClient{
-			query: supernodetypes.NewQueryClient(conn),
+			query: supernodetypes.NewQueryClient(gogoConn),
 		},
 		Claim: &ClaimClient{
-			query: claimtypes.NewQueryClient(conn),
+			query: claimtypes.NewQueryClient(gogoConn),
 		},
 		EVMigration: &EVMigrationClient{
-			query: evmigrationtypes.NewQueryClient(conn),
+			query: evmigrationtypes.NewQueryClient(gogoConn),
 		},
 		Audit: &AuditClient{
 			//query: audittypes.NewQueryClient(conn),
 		},
 		EVM: &EVMClient{
-			query: evmtypes.NewQueryClient(conn),
+			query: evmtypes.NewQueryClient(gogoConn),
 		},
 		ERC20: &ERC20Client{
-			query: erc20types.NewQueryClient(conn),
+			query: erc20types.NewQueryClient(gogoConn),
 		},
 		FeeMarket: &FeeMarketClient{
-			query: feemarkettypes.NewQueryClient(conn),
+			query: feemarkettypes.NewQueryClient(gogoConn),
 		},
 		PreciseBank: &PreciseBankClient{
-			query: precisebanktypes.NewQueryClient(conn),
+			query: precisebanktypes.NewQueryClient(gogoConn),
 		},
 	}
 	c.EVM.client = c

@@ -5,11 +5,18 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math/big"
+	"net"
+	"strings"
 	"testing"
 
 	sdkmath "cosmossdk.io/math"
 	blockbase "github.com/LumeraProtocol/sdk-go/blockchain/base"
+	"github.com/LumeraProtocol/sdk-go/constants"
+	sdkgrpc "github.com/LumeraProtocol/sdk-go/internal/grpc"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/crypto/hd"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
 	precisebanktypes "github.com/cosmos/evm/x/precisebank/types"
@@ -18,6 +25,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 // Mock the QueryClient interfaces directly. Going through bufconn breaks on
@@ -207,6 +216,52 @@ func TestEVMClient_GlobalMinGasPrice_NilInt(t *testing.T) {
 	}
 }
 
+func TestEVMNumericQueries_RoundTripThroughGRPC(t *testing.T) {
+	const bufSize = 1024 * 1024
+	lis := bufconn.Listen(bufSize)
+	srv := grpc.NewServer(grpc.ForceServerCodec(sdkgrpc.GogoCodec()))
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	evmtypes.RegisterQueryServer(srv, &evmNumericQueryServer{})
+	feemarkettypes.RegisterQueryServer(srv, &feeMarketNumericQueryServer{})
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("dial bufnet: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	evm := &EVMClient{query: evmtypes.NewQueryClient(sdkgrpc.GogoClientConn(conn))}
+	baseFee, err := evm.BaseFee(context.Background())
+	if err != nil {
+		t.Fatalf("EVM BaseFee over gRPC: %v", err)
+	}
+	if baseFee.String() != "2500000000" {
+		t.Fatalf("EVM BaseFee = %s", baseFee)
+	}
+
+	feeMarket := &FeeMarketClient{query: feemarkettypes.NewQueryClient(sdkgrpc.GogoClientConn(conn))}
+	feeMarketBaseFee, err := feeMarket.BaseFee(context.Background())
+	if err != nil {
+		t.Fatalf("FeeMarket BaseFee over gRPC: %v", err)
+	}
+	if feeMarketBaseFee.String() != "0.002500000000000000" {
+		t.Fatalf("FeeMarket BaseFee = %s", feeMarketBaseFee)
+	}
+}
+
 func TestEVMClient_ResolveGasCaps_UsesFeeMarketMinGasPrice(t *testing.T) {
 	ctx := context.Background()
 	baseClient, err := blockbase.New(ctx, blockbase.Config{
@@ -293,10 +348,70 @@ func TestDecodeMsgEthereumTxResponses_AcceptsHexPrefix(t *testing.T) {
 	}
 }
 
+func TestDecodeMsgEthereumTxResponses_AcceptsRawProtoBytes(t *testing.T) {
+	want := &evmtypes.MsgEthereumTxResponse{Ret: []byte{0x03, 0x04}}
+	txData := &sdk.TxMsgData{
+		MsgResponses: []*codectypes.Any{codectypes.UnsafePackAny(want)},
+	}
+	raw, err := proto.Marshal(txData)
+	if err != nil {
+		t.Fatalf("marshal tx data: %v", err)
+	}
+
+	got, err := decodeMsgEthereumTxResponses(raw)
+	if err != nil {
+		t.Fatalf("decode raw tx responses: %v", err)
+	}
+	if len(got) != 1 || !equalBytes(got[0].Ret, want.Ret) {
+		t.Fatalf("decoded response mismatch: %+v", got)
+	}
+}
+
+func TestCallContract_ReturnsSenderDerivationError(t *testing.T) {
+	kr, _ := newCosmosSigningKeyringForEVM(t, "alice")
+	baseClient, err := blockbase.New(context.Background(), blockbase.Config{
+		GRPCAddr:       "127.0.0.1:1",
+		EVMChainID:     big.NewInt(1414),
+		EVMNativeDenom: "ulume",
+	}, kr, "alice")
+	if err != nil {
+		t.Fatalf("base.New: %v", err)
+	}
+	t.Cleanup(func() { _ = baseClient.Close() })
+
+	evm := &EVMClient{
+		client: &Client{Client: baseClient},
+		query:  &stubEVMQuery{ethCallResp: &evmtypes.MsgEthereumTxResponse{}},
+	}
+
+	_, err = evm.CallContract(context.Background(), common.HexToAddress("0x000000000000000000000000000000000000dEaD"), nil)
+	if err == nil {
+		t.Fatalf("expected sender derivation error")
+	}
+}
+
 type stubFeeMarketQuery struct {
 	params  *feemarkettypes.QueryParamsResponse
 	baseFee *feemarkettypes.QueryBaseFeeResponse
 	gas     *feemarkettypes.QueryBlockGasResponse
+}
+
+type evmNumericQueryServer struct {
+	evmtypes.UnimplementedQueryServer
+}
+
+func (evmNumericQueryServer) BaseFee(context.Context, *evmtypes.QueryBaseFeeRequest) (*evmtypes.QueryBaseFeeResponse, error) {
+	baseFee := sdkmath.NewInt(2_500_000_000)
+	return &evmtypes.QueryBaseFeeResponse{BaseFee: &baseFee}, nil
+}
+
+type feeMarketNumericQueryServer struct {
+	feemarkettypes.UnimplementedQueryServer
+}
+
+func (feeMarketNumericQueryServer) BaseFee(context.Context, *feemarkettypes.QueryBaseFeeRequest) (*feemarkettypes.QueryBaseFeeResponse, error) {
+	baseFee := sdkmath.LegacyMustNewDecFromStr("0.0025")
+	return &feemarkettypes.QueryBaseFeeResponse{BaseFee: &baseFee}, nil
 }
 
 func (s *stubFeeMarketQuery) Params(_ context.Context, _ *feemarkettypes.QueryParamsRequest, _ ...grpc.CallOption) (*feemarkettypes.QueryParamsResponse, error) {
@@ -383,4 +498,25 @@ func equalBytes(a, b []byte) bool {
 		}
 	}
 	return true
+}
+
+func newCosmosSigningKeyringForEVM(t *testing.T, keyName string) (keyring.Keyring, string) {
+	t.Helper()
+	kr, err := sdkcrypto.NewKeyring(sdkcrypto.KeyringParams{
+		AppName: "lumera",
+		Backend: "test",
+		Dir:     t.TempDir(),
+		Input:   strings.NewReader(""),
+	})
+	if err != nil {
+		t.Fatalf("create keyring: %v", err)
+	}
+	if _, err := kr.NewAccount(keyName, evmTxTestMnemonic, "", sdk.FullFundraiserPath, hd.Secp256k1); err != nil {
+		t.Fatalf("new account: %v", err)
+	}
+	addr, err := sdkcrypto.AddressFromKey(kr, keyName, constants.LumeraAccountHRP)
+	if err != nil {
+		t.Fatalf("derive address: %v", err)
+	}
+	return kr, addr
 }

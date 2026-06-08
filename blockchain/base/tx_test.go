@@ -51,6 +51,12 @@ type txBuildServer struct {
 	accountInfoCalls int
 }
 
+type broadcastWaitServer struct {
+	txtypes.UnimplementedServiceServer
+	broadcast *abcipb.TxResponse
+	get       *abcipb.TxResponse
+}
+
 func (s *getTxSequenceServer) GetTx(ctx context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -94,6 +100,14 @@ func (s *txBuildServer) counts() (simulateCalls int, accountInfoCalls int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.simulateCalls, s.accountInfoCalls
+}
+
+func (s *broadcastWaitServer) BroadcastTx(context.Context, *txtypes.BroadcastTxRequest) (*txtypes.BroadcastTxResponse, error) {
+	return &txtypes.BroadcastTxResponse{TxResponse: s.broadcast}, nil
+}
+
+func (s *broadcastWaitServer) GetTx(context.Context, *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
+	return &txtypes.GetTxResponse{TxResponse: s.get}, nil
 }
 
 func TestWaitForTxInclusionRetriesNotFoundAfterWaitSuccess(t *testing.T) {
@@ -191,6 +205,84 @@ func TestBuildAndSignTxWithOptions_ManualSignerInfo(t *testing.T) {
 	}
 
 	assertDecodedTx(t, txBytes, 250000, 6250, sequence, 1)
+}
+
+func TestBuildAndSignTxWithOptions_ZeroFee(t *testing.T) {
+	kr, addr := newSigningTestKeyring(t, "alice")
+	c := &Client{
+		keyring: kr,
+		keyName: "alice",
+		config: Config{
+			ChainID:    "lumera-devnet-1",
+			AccountHRP: constants.LumeraAccountHRP,
+		},
+	}
+
+	accountNumber := uint64(7)
+	sequence := uint64(9)
+	txBytes, err := c.BuildAndSignTxWithOptions(context.Background(), TxBuildOptions{
+		Messages:       []sdk.Msg{newMsgSend(addr, addr)},
+		GasLimit:       250000,
+		SkipSimulation: true,
+		AccountNumber:  &accountNumber,
+		Sequence:       &sequence,
+		ZeroFee:        true,
+	})
+	if err != nil {
+		t.Fatalf("BuildAndSignTxWithOptions zero fee error: %v", err)
+	}
+
+	assertDecodedTx(t, txBytes, 250000, 0, sequence, 1)
+}
+
+func TestBroadcastAndWait_ChecksIncludedTxCode(t *testing.T) {
+	const bufSize = 1024 * 1024
+	lis := bufconn.Listen(bufSize)
+	srv := grpc.NewServer()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	handler := &broadcastWaitServer{
+		broadcast: &abcipb.TxResponse{Txhash: "hash"},
+		get:       &abcipb.TxResponse{Txhash: "hash", Code: 7, RawLog: "deliver failed"},
+	}
+	txtypes.RegisterServiceServer(srv, handler)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("dial bufnet: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	c := &Client{
+		conn: conn,
+		config: Config{
+			WaitTx: clientconfig.WaitTxConfig{
+				PollInterval:          time.Millisecond,
+				PollMaxRetries:        1,
+				PollBackoffMultiplier: 1,
+			},
+		},
+	}
+
+	_, _, err = c.BroadcastAndWait(context.Background(), []byte{0x01}, txtypes.BroadcastMode_BROADCAST_MODE_SYNC)
+	if err == nil {
+		t.Fatalf("expected included tx code error")
+	}
+	if !strings.Contains(err.Error(), "tx failed with code 7") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestBuildAndSignTxWithOptions_QueriesAccountInfoAndSimulates(t *testing.T) {
@@ -303,7 +395,7 @@ func TestNewAppliesDefaultMessageSizes(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = c.Close() })
 
-	if c.config.MaxRecvMsgSize != defaultMaxMessageSize || c.config.MaxSendMsgSize != defaultMaxMessageSize {
+	if c.config.MaxRecvMsgSize != defaultMaxRecvMessageSize || c.config.MaxSendMsgSize != defaultMaxSendMessageSize {
 		t.Fatalf("unexpected max message sizes: recv=%d send=%d", c.config.MaxRecvMsgSize, c.config.MaxSendMsgSize)
 	}
 }
@@ -359,7 +451,11 @@ func assertDecodedTx(t *testing.T, txBytes []byte, wantGas uint64, wantFee int64
 		t.Fatalf("unexpected gas: got %d want %d", feeTx.GetGas(), wantGas)
 	}
 	fee := feeTx.GetFee()
-	if len(fee) != 1 || fee[0].Denom != "ulume" || !fee[0].Amount.Equal(sdkmath.NewInt(wantFee)) {
+	if wantFee == 0 {
+		if !fee.Empty() {
+			t.Fatalf("unexpected fee: %s", fee)
+		}
+	} else if len(fee) != 1 || fee[0].Denom != "ulume" || !fee[0].Amount.Equal(sdkmath.NewInt(wantFee)) {
 		t.Fatalf("unexpected fee: %s", fee)
 	}
 

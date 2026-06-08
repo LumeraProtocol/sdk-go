@@ -6,6 +6,8 @@ import (
 
 	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
 	evmigrationtypes "github.com/LumeraProtocol/lumera/x/evmigration/types"
+	blockbase "github.com/LumeraProtocol/sdk-go/blockchain/base"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 // EVMigrationClient provides evmigration module query operations.
@@ -86,7 +88,11 @@ func (c *Client) ClaimLegacyAccountTx(ctx context.Context, msg *evmigrationtypes
 		return nil, fmt.Errorf("msg is required")
 	}
 
-	txBytes, err := c.BuildAndSignTx(ctx, msg, memo)
+	txBytes, err := c.BuildAndSignTxWithOptions(ctx, blockbase.TxBuildOptions{
+		Messages: []sdk.Msg{msg},
+		Memo:     memo,
+		ZeroFee:  true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("build and sign tx: %w", err)
 	}
@@ -110,7 +116,11 @@ func (c *Client) MigrateValidatorTx(ctx context.Context, msg *evmigrationtypes.M
 		return nil, fmt.Errorf("msg is required")
 	}
 
-	txBytes, err := c.BuildAndSignTx(ctx, msg, memo)
+	txBytes, err := c.BuildAndSignTxWithOptions(ctx, blockbase.TxBuildOptions{
+		Messages: []sdk.Msg{msg},
+		Memo:     memo,
+		ZeroFee:  true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("build and sign tx: %w", err)
 	}

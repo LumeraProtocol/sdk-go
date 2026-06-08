@@ -16,7 +16,7 @@ Quick links by topic:
 ## Package `client`
 
 - `client.New(ctx, Config, keyring, opts...) (*Client, error)` builds a unified client exposing `Blockchain` and `Cascade`.
-- `Config` (alias of `client/config.Config`): chain endpoints, address/key, timeouts, wait-tx config, message sizes, retries, optional logger.
+- `Config` (alias of `client/config.Config`): chain endpoints, address/key, timeouts, wait-tx config, message sizes, retries, optional logger. The default gRPC receive limit is 4 MiB; callers can opt up when a chain endpoint needs larger responses.
 - Options: `WithChainID`, `WithKeyName`, `WithGRPCEndpoint`, `WithRPCEndpoint`, `WithBlockchainTimeout`, `WithStorageTimeout`, `WithMaxRetries`, `WithMaxMessageSize`, `WithWaitTxConfig`, `WithLogLevel`, `WithLogger`, `WithEVMChainID`, `WithEVMNativeDenom`, `WithEVMExtendedDenom`, `WithEVMGasCaps`.
 - `Client.Blockchain` is a `*blockchain.Client`; `Client.Cascade` is a `*cascade.Client`. `Close()` tears both down.
 - `NewFactory` captures a base config/keyring for multi-signer flows; `Factory.WithSigner` returns a per-signer `Client`.
@@ -44,7 +44,7 @@ Quick links by topic:
 - Claim and Audit modules: query clients are wired; add methods as the chain exposes additional endpoints.
 - EVMigration module:
   - Queries: `Params`, `MigrationRecord`, `MigrationRecordByNewAddress`, `MigrationEstimate`, `MigrationStats`.
-  - Tx helpers: `ClaimLegacyAccountTx`, `MigrateValidatorTx`. Message constructors: `NewMsgClaimLegacyAccount`, `NewMsgMigrateValidator`. Result type: `MigrationResult` (legacy/new address, tx hash, height).
+  - Tx helpers: `ClaimLegacyAccountTx`, `MigrateValidatorTx` build zero-fee migration transactions. Message constructors: `NewMsgClaimLegacyAccount`, `NewMsgMigrateValidator`. Result type: `MigrationResult` (legacy/new address, tx hash, height).
 - EVM module (x/vm):
   - Queries: `Code`, `Storage`, `Balance` (alume), `EthAccount`, `CosmosAccount`, `Params`, `BaseFee` (alume), `Config`, `GlobalMinGasPrice`, `EthCall`, `EstimateGas`, `TraceTx`.
   - Tx helpers: `SendEthereumTransaction`, `DeployContract`, `CallContract`, `RawEthereumTx`. Options struct: `EthereumTxOptions` (Nonce/GasLimit/GasTipCap/GasFeeCap/Value/AccessList). Result: `EthereumTransactionResult` (eth tx hash, cosmos hash, height, gas used, vm error, return data, logs).
@@ -57,7 +57,7 @@ Quick links by topic:
   - Queries: `Params`, `BaseFee` (ulume decimal), `BlockGas`.
 - PreciseBank module (x/precisebank):
   - Queries: `Remainder`, `FractionalBalance` (sub-ulume sub-balances backing 18-decimal EVM views).
-- Shared tx utilities: `BuildAndSignTx`, `BuildAndSignTxWithGasAdjustment`, `BuildAndSignTxWithOptions`, `PrepareTx` + `SignPreparedTx`, `Simulate`, `Broadcast`, `BroadcastAndWait`, `WaitForTxInclusion`, `GetTx`, `GetTxsByEvents`, `ExtractEventAttribute` (for parsing event attributes like `action_id`). `BuildAndSignTxWithOptions` rejects `MsgEthereumTx` to prevent accidental double-signing — use `EVMClient.SendEthereumTransaction` instead.
+- Shared tx utilities: `BuildAndSignTx`, `BuildAndSignTxWithGasAdjustment`, `BuildAndSignTxWithOptions`, `PrepareTx` + `SignPreparedTx`, `Simulate`, `Broadcast`, `BroadcastAndWait`, `WaitForTxInclusion`, `GetTx`, `GetTxsByEvents`, `ExtractEventAttribute` (for parsing event attributes like `action_id`). `BuildAndSignTxWithOptions` rejects `MsgEthereumTx` to prevent accidental double-signing, and its `ZeroFee` option intentionally emits no fee coins for chain-waived flows such as evmigration.
 
 ## Package `types`
 

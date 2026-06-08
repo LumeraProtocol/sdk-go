@@ -7,12 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	signingtypes "github.com/cosmos/cosmos-sdk/types/tx/signing"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 )
 
 const evmSignTestMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+const evmSignMismatchMnemonic = "legal winner thank year wave sausage worth useful legal winner thank yellow"
 
 func writeMnemonic(t *testing.T) string {
 	t.Helper()
@@ -51,6 +55,56 @@ func TestSignEthereumTx_RoundTrip(t *testing.T) {
 	recovered, err := RecoverSender(signed)
 	require.NoError(t, err)
 	require.Equal(t, strings.ToLower(from), strings.ToLower(recovered.Hex()))
+}
+
+type mismatchedSignerKeyring struct {
+	keyring.Keyring
+	reported *keyring.Record
+	signer   keyring.Keyring
+	signAs   string
+}
+
+func (k mismatchedSignerKeyring) Key(string) (*keyring.Record, error) {
+	return k.reported, nil
+}
+
+func (k mismatchedSignerKeyring) Sign(_ string, msg []byte, mode signingtypes.SignMode) ([]byte, cryptotypes.PubKey, error) {
+	sig, _, err := k.signer.Sign(k.signAs, msg, mode)
+	return sig, nil, err
+}
+
+func TestSignEthereumTx_RejectsRecoveredSenderMismatch(t *testing.T) {
+	mnemonicFile := writeMnemonic(t)
+	alice, _, _, err := LoadKeyring("alice", mnemonicFile, KeyTypeEVM)
+	require.NoError(t, err)
+	aliceRec, err := alice.Key("alice")
+	require.NoError(t, err)
+
+	bob, err := NewKeyring(KeyringParams{
+		AppName: "lumera",
+		Backend: "test",
+		Dir:     t.TempDir(),
+		Input:   strings.NewReader(""),
+	})
+	require.NoError(t, err)
+	_, err = bob.NewAccount("bob", evmSignMismatchMnemonic, "", KeyTypeEVM.HDPath(), KeyTypeEVM.SigningAlgo())
+	require.NoError(t, err)
+
+	chainID := big.NewInt(1414)
+	tx := ethtypes.NewTx(&ethtypes.DynamicFeeTx{
+		ChainID:   chainID,
+		GasTipCap: big.NewInt(1),
+		GasFeeCap: big.NewInt(2),
+		Gas:       21_000,
+	})
+
+	_, err = SignEthereumTx(mismatchedSignerKeyring{
+		reported: aliceRec,
+		signer:   bob,
+		signAs:   "bob",
+	}, "alice", chainID, tx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "recovered sender")
 }
 
 func TestSignEthereumTx_RejectsCosmosKey(t *testing.T) {

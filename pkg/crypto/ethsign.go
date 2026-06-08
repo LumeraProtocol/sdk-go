@@ -50,9 +50,12 @@ func SignEthereumTx(
 	signer := ethtypes.LatestSignerForChainID(chainID)
 	hash := signer.Hash(tx).Bytes()
 
-	sig, _, err := kr.Sign(keyName, hash, signingtypes.SignMode_SIGN_MODE_DIRECT)
+	sig, signPub, err := kr.Sign(keyName, hash, signingtypes.SignMode_SIGN_MODE_DIRECT)
 	if err != nil {
 		return nil, fmt.Errorf("keyring sign: %w", err)
+	}
+	if signPub != nil && !signPub.Equals(pub) {
+		return nil, fmt.Errorf("signer pubkey mismatch for key %q", keyName)
 	}
 	if len(sig) != 65 {
 		return nil, fmt.Errorf("expected 65-byte recoverable signature, got %d", len(sig))
@@ -61,6 +64,14 @@ func SignEthereumTx(
 	signed, err := tx.WithSignature(signer, sig)
 	if err != nil {
 		return nil, fmt.Errorf("apply signature: %w", err)
+	}
+	recovered, err := RecoverSender(signed)
+	if err != nil {
+		return nil, fmt.Errorf("recover signed sender: %w", err)
+	}
+	want := common.BytesToAddress(pub.Address())
+	if recovered != want {
+		return nil, fmt.Errorf("recovered sender %s does not match key %q address %s", recovered.Hex(), keyName, want.Hex())
 	}
 	return signed, nil
 }

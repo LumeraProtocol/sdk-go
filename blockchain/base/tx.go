@@ -13,6 +13,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	signingtypes "github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -21,6 +22,8 @@ import (
 )
 
 const defaultSignedTxGasLimit = 200000
+
+var msgEthereumTxTypeURL = sdk.MsgTypeURL(&evmtypes.MsgEthereumTx{})
 
 // TxBuildOptions controls how a transaction is assembled and signed.
 type TxBuildOptions struct {
@@ -32,6 +35,7 @@ type TxBuildOptions struct {
 	AccountNumber  *uint64
 	Sequence       *uint64
 	FeeAmount      sdk.Coins
+	ZeroFee        bool
 }
 
 // TxSignerInfo contains the signer account metadata used for signing.
@@ -87,6 +91,12 @@ func (c *Client) BroadcastAndWait(ctx context.Context, txBytes []byte, mode txty
 	resp, err := c.WaitForTxInclusion(ctx, txHash)
 	if err != nil {
 		return txHash, nil, err
+	}
+	if resp == nil || resp.TxResponse == nil {
+		return txHash, nil, fmt.Errorf("empty tx response")
+	}
+	if resp.TxResponse.Code != 0 {
+		return txHash, resp, fmt.Errorf("tx failed with code %d: %s", resp.TxResponse.Code, resp.TxResponse.RawLog)
 	}
 
 	return txHash, resp, nil
@@ -214,7 +224,10 @@ func (c *Client) validateTxBuildOptions(opts TxBuildOptions) error {
 	if strings.TrimSpace(c.config.AccountHRP) == "" {
 		return fmt.Errorf("account HRP is required")
 	}
-	if opts.FeeAmount.Empty() {
+	if opts.ZeroFee && !opts.FeeAmount.Empty() {
+		return fmt.Errorf("zero fee cannot be combined with explicit fee amount")
+	}
+	if !opts.ZeroFee && opts.FeeAmount.Empty() {
 		if strings.TrimSpace(c.config.FeeDenom) == "" {
 			return fmt.Errorf("fee denom is required")
 		}
@@ -223,7 +236,7 @@ func (c *Client) validateTxBuildOptions(opts TxBuildOptions) error {
 		}
 	}
 	for _, msg := range opts.Messages {
-		if sdk.MsgTypeURL(msg) == "/cosmos.evm.vm.v1.MsgEthereumTx" {
+		if sdk.MsgTypeURL(msg) == msgEthereumTxTypeURL {
 			return fmt.Errorf("MsgEthereumTx must use EVMClient.SendEthereumTransaction; the cosmos signing pipeline rejects it")
 		}
 	}
@@ -302,6 +315,9 @@ func (c *Client) resolveGasLimit(ctx context.Context, txCfg client.TxConfig, bui
 }
 
 func (c *Client) resolveFeeAmount(gas uint64, opts TxBuildOptions) (sdk.Coins, error) {
+	if opts.ZeroFee {
+		return nil, nil
+	}
 	if !opts.FeeAmount.Empty() {
 		return opts.FeeAmount, nil
 	}

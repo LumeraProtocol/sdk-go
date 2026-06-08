@@ -30,7 +30,7 @@ log.Printf("downloaded to %s", dl.OutputPath)
 
 ## Subscribe to task events
 
-The Cascade client bridges SuperNode SDK events and adds SDK-specific ones (prefixed `sdk-go:`).
+The Cascade client bridges SuperNode SDK events and adds SDK-specific diagnostics such as `sdk:supernodes_unavailable`.
 
 ```go
 lumera.Cascade.SubscribeToAllEvents(ctx, func(_ context.Context, e event.Event) {

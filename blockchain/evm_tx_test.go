@@ -1,18 +1,27 @@
 package blockchain
 
 import (
+	"context"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	abcipb "cosmossdk.io/api/cosmos/base/abci/v1beta1"
+	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
+	blockbase "github.com/LumeraProtocol/sdk-go/blockchain/base"
+	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
 	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 const evmTxTestMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
@@ -69,10 +78,12 @@ func TestBuildEthereumTxBytes_RoundTrip(t *testing.T) {
 
 	// Extension option must be ExtensionOptionsEthereumTx so the dual-route
 	// ante handler picks the EVM path.
-	// Skip explicit assertion: the BuildTxWithEvmParams call sets the option
-	// internally — if it were missing the ante handler would reject the tx
-	// on-chain. Decoding via the standard TxDecoder already verified the
-	// envelope is well-formed.
+	withExt, ok := decoded.(interface {
+		GetExtensionOptions() []*codectypes.Any
+	})
+	require.True(t, ok)
+	require.Len(t, withExt.GetExtensionOptions(), 1)
+	require.Equal(t, codectypes.MsgTypeURL(&evmtypes.ExtensionOptionsEthereumTx{}), withExt.GetExtensionOptions()[0].TypeUrl)
 }
 
 func TestBuildEthereumTxBytes_RequiresExtendedDenom(t *testing.T) {
@@ -115,4 +126,109 @@ func TestRawEthereumTx_RequiresClientBackref(t *testing.T) {
 	_, err := c.RawEthereumTx(t.Context(), nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not wired")
+}
+
+func TestRawEthereumTx_RejectsChainIDMismatch(t *testing.T) {
+	baseClient, err := blockbase.New(t.Context(), blockbase.Config{
+		GRPCAddr:         "127.0.0.1:1",
+		EVMChainID:       big.NewInt(1414),
+		EVMNativeDenom:   "ulume",
+		EVMExtendedDenom: "alume",
+		FeeDenom:         "ulume",
+		InsecureGRPC:     true,
+	}, nil, "")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = baseClient.Close() })
+
+	signed := signedEVMTestTx(t, big.NewInt(1415))
+	_, err = (&EVMClient{client: &Client{Client: baseClient}}).RawEthereumTx(t.Context(), signed)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "chain ID")
+}
+
+func TestSendEthereumTransaction_HappyPath(t *testing.T) {
+	srv, endpoint := newEVMGRPCTestServer(t)
+	defer srv.Stop()
+
+	mnemonicFile := writeMnemonicForEVM(t)
+	kr, _, _, err := sdkcrypto.LoadKeyring("alice", mnemonicFile, sdkcrypto.KeyTypeEVM)
+	require.NoError(t, err)
+
+	baseClient, err := blockbase.New(t.Context(), blockbase.Config{
+		ChainID:          "lumera-devnet-1",
+		GRPCAddr:         endpoint,
+		AccountHRP:       "lumera",
+		FeeDenom:         "ulume",
+		EVMChainID:       big.NewInt(1414),
+		EVMNativeDenom:   "ulume",
+		EVMExtendedDenom: "alume",
+		InsecureGRPC:     true,
+		WaitTx: clientconfig.WaitTxConfig{
+			PollInterval:          time.Millisecond,
+			PollMaxRetries:        3,
+			PollBackoffMultiplier: 1,
+		},
+	}, kr, "alice")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = baseClient.Close() })
+
+	to := common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+	evm := &EVMClient{client: &Client{Client: baseClient}}
+	res, err := evm.SendEthereumTransaction(t.Context(), &to, []byte{0xaa}, &EthereumTxOptions{
+		Nonce:     uint64Ptr(7),
+		GasLimit:  50_000,
+		GasTipCap: big.NewInt(1),
+		GasFeeCap: big.NewInt(2),
+		Value:     big.NewInt(3),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.NotEmpty(t, res.EthTxHash)
+	require.Equal(t, "COSMOS_HASH", res.CosmosHash)
+	require.Equal(t, int64(12), res.Height)
+}
+
+type evmTxServiceServer struct {
+	txtypes.UnimplementedServiceServer
+}
+
+func (s evmTxServiceServer) BroadcastTx(context.Context, *txtypes.BroadcastTxRequest) (*txtypes.BroadcastTxResponse, error) {
+	return &txtypes.BroadcastTxResponse{TxResponse: &abcipb.TxResponse{Txhash: "COSMOS_HASH"}}, nil
+}
+
+func (s evmTxServiceServer) GetTx(context.Context, *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
+	return &txtypes.GetTxResponse{TxResponse: &abcipb.TxResponse{Txhash: "COSMOS_HASH", Height: 12}}, nil
+}
+
+func newEVMGRPCTestServer(t *testing.T) (*grpc.Server, string) {
+	t.Helper()
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	srv := grpc.NewServer()
+	txtypes.RegisterServiceServer(srv, evmTxServiceServer{})
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(func() { _ = lis.Close() })
+	return srv, lis.Addr().String()
+}
+
+func signedEVMTestTx(t *testing.T, chainID *big.Int) *ethtypes.Transaction {
+	t.Helper()
+	mnemonicFile := writeMnemonicForEVM(t)
+	kr, _, _, err := sdkcrypto.LoadKeyring("alice", mnemonicFile, sdkcrypto.KeyTypeEVM)
+	require.NoError(t, err)
+	tx := ethtypes.NewTx(&ethtypes.DynamicFeeTx{
+		ChainID:   chainID,
+		GasTipCap: big.NewInt(1),
+		GasFeeCap: big.NewInt(2),
+		Gas:       21_000,
+	})
+	signed, err := sdkcrypto.SignEthereumTx(kr, "alice", chainID, tx)
+	require.NoError(t, err)
+	return signed
+}
+
+func uint64Ptr(v uint64) *uint64 {
+	return &v
 }

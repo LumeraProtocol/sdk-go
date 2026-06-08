@@ -27,8 +27,8 @@ type Config struct {
 
 	// Optional overrides
 	MaxRetries     int
-	MaxRecvMsgSize int // Max message size for gRPC (default: 50MB)
-	MaxSendMsgSize int
+	MaxRecvMsgSize int // Max receive message size for gRPC (default: 4MB)
+	MaxSendMsgSize int // Max send message size for gRPC (default: 50MB)
 
 	// WaitTx controls transaction confirmation behaviour.
 	WaitTx WaitTxConfig
@@ -102,7 +102,7 @@ func (c *Config) Validate() error {
 		c.StorageTimeout = 5 * time.Minute
 	}
 	if c.MaxRecvMsgSize == 0 {
-		c.MaxRecvMsgSize = 1024 * 1024 * 50 // 50MB
+		c.MaxRecvMsgSize = 1024 * 1024 * 4 // 4MB
 	}
 	if c.MaxSendMsgSize == 0 {
 		c.MaxSendMsgSize = 1024 * 1024 * 50 // 50MB
@@ -124,7 +124,7 @@ func Default() Config {
 		BlockchainTimeout: 10 * time.Second,
 		StorageTimeout:    5 * time.Minute,
 		MaxRetries:        3,
-		MaxRecvMsgSize:    1024 * 1024 * 50,
+		MaxRecvMsgSize:    1024 * 1024 * 4,
 		MaxSendMsgSize:    1024 * 1024 * 50,
 		LogLevel:          "error",
 		WaitTx:            DefaultWaitTxConfig(),

@@ -134,6 +134,8 @@ The eight standard cosmos/evm precompiles (bank, staking, distribution, gov, ICS
 
 `x/evmigration` handles the one-time migration of pre-EVM (coin type 118) accounts and validators to the EVM-enabled (coin type 60) chain. Use queries for pre-flight, then submit the migration tx signed by the new address.
 
+The migration tx helpers intentionally build zero-fee transactions for the chain-waived evmigration flow.
+
 ```go
 // Pre-flight.
 est, err := lumera.Blockchain.EVMigration.MigrationEstimate(ctx, legacyAddr)

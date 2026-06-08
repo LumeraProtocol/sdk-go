@@ -319,9 +319,10 @@ func (c *EVMClient) CallContract(
 	var from common.Address
 	if c.client != nil && c.client.KeyName() != "" {
 		hex, err := sdkcrypto.EVMAddressFromKey(c.client.Keyring(), c.client.KeyName())
-		if err == nil {
-			from = common.HexToAddress(hex)
+		if err != nil {
+			return nil, fmt.Errorf("derive sender address: %w", err)
 		}
+		from = common.HexToAddress(hex)
 	}
 	resp, err := c.EthCall(ctx, from, &to, data, 0)
 	if err != nil {
@@ -348,6 +349,16 @@ func (c *EVMClient) RawEthereumTx(
 	cfg := c.client.Cfg()
 	if cfg.EVMChainID == nil {
 		return nil, fmt.Errorf("EVMChainID required to encode MsgEthereumTx")
+	}
+	if signed == nil {
+		return nil, fmt.Errorf("signed tx is required")
+	}
+	signedChainID := signed.ChainId()
+	if signedChainID == nil {
+		return nil, fmt.Errorf("signed tx chain ID is missing")
+	}
+	if signedChainID.Cmp(cfg.EVMChainID) != 0 {
+		return nil, fmt.Errorf("signed tx chain ID %s does not match configured EVMChainID %s", signedChainID, cfg.EVMChainID)
 	}
 
 	nativeDenom, extendedDenom, err := c.resolveEVMDenoms(ctx, cfg)
@@ -534,10 +545,14 @@ func buildEthereumTxBytes(signed *ethtypes.Transaction, nativeDenom, extendedDen
 // decodeMsgEthereumTxResponses extracts MsgEthereumTxResponse entries from a
 // cosmos TxResponse.Data field. The data is a hex-encoded TxMsgData proto.
 func decodeMsgEthereumTxResponses(data []byte) ([]*evmtypes.MsgEthereumTxResponse, error) {
-	encoded := strings.TrimPrefix(string(data), "0x")
+	dataStr := string(data)
+	encoded := strings.TrimPrefix(dataStr, "0x")
 	raw, err := hex.DecodeString(encoded)
 	if err != nil {
-		return nil, err
+		if strings.HasPrefix(dataStr, "0x") {
+			return nil, err
+		}
+		raw = data
 	}
 	return evmtypes.DecodeTxResponses(raw)
 }

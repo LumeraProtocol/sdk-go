@@ -66,6 +66,8 @@ hexAddr, err := sdkcrypto.EVMAddressFromKey(kr, "host-key")
 // e.g. 0xAbC1234...
 ```
 
+`EVMToBech32` and `Bech32ToEVM` are byte-level conversions for 20-byte account identifiers. They round-trip EVM-derived accounts, but a legacy Cosmos `secp256k1` bech32 address does not prove or recover the key's Ethereum address; use `EVMAddressFromKey` when the keyring entry is available.
+
 ## Ethereum-format signing primitives
 
 When wrapping a raw `go-ethereum` transaction yourself, the helpers in `pkg/crypto` produce an EIP-155 signed tx using the keyring:

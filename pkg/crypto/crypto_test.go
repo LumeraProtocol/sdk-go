@@ -8,11 +8,14 @@ import (
 	"testing"
 
 	"github.com/LumeraProtocol/sdk-go/constants"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/evm/crypto/ethsecp256k1"
 	"github.com/cosmos/go-bip39"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -488,6 +491,25 @@ func TestNewDefaultTxConfig(t *testing.T) {
 
 	builder := txCfg.NewTxBuilder()
 	require.NotNil(t, builder)
+}
+
+func TestInterfaceRegistry_UnpacksLegacyInjectiveEthSecp256k1PubKey(t *testing.T) {
+	pub := &ethsecp256k1.PubKey{Key: []byte{
+		0x02, 0x5c, 0x9b, 0x07, 0x4e, 0x20, 0x75, 0xf2, 0x2f, 0xb4, 0x6e,
+		0x60, 0x6d, 0x9a, 0x57, 0xa1, 0x55, 0x49, 0xfa, 0xa2, 0xac, 0xad,
+		0x5b, 0x90, 0x31, 0xb6, 0x49, 0x3f, 0x06, 0x6d, 0x9b, 0x0b, 0x3f,
+	}}
+	value, err := proto.Marshal(pub)
+	require.NoError(t, err)
+
+	any := &codectypes.Any{
+		TypeUrl: "/injective.crypto.v1beta1.ethsecp256k1.PubKey",
+		Value:   value,
+	}
+	var decoded cryptotypes.PubKey
+	require.NoError(t, newInterfaceRegistry().UnpackAny(any, &decoded))
+	require.Equal(t, ethsecp256k1.KeyType, decoded.Type())
+	require.Equal(t, pub.Bytes(), decoded.Bytes())
 }
 
 func TestSignTxWithKeyring(t *testing.T) {

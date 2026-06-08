@@ -29,10 +29,11 @@ func EVMToBech32(addr common.Address, hrp string) (string, error) {
 	return bech, nil
 }
 
-// Bech32ToEVM decodes a bech32 account address and returns those 20 bytes as
-// an EVM address. It cannot prove the address came from an eth_secp256k1 key;
-// callers that care must validate against a keyring entry, on-chain account
-// metadata, or an evmigration record.
+// Bech32ToEVM decodes a bech32 account address and reinterprets those 20 bytes
+// as an EVM address. This is only a byte-level conversion: for legacy Cosmos
+// secp256k1 accounts, the result is not the key's Ethereum address. Callers
+// that care must validate against a keyring entry, on-chain account metadata,
+// or an evmigration record.
 func Bech32ToEVM(bech32Addr string) (common.Address, error) {
 	if bech32Addr == "" {
 		return common.Address{}, fmt.Errorf("bech32 address is required")

@@ -19,7 +19,7 @@ go get github.com/LumeraProtocol/sdk-go
 - `ChainID`, `GRPCEndpoint`, `RPCEndpoint` – chain connection details. gRPC uses TLS automatically for non-local hosts/port 443.
 - `Address`, `KeyName` – Cosmos account info in your keyring.
 - `BlockchainTimeout`, `StorageTimeout` – default deadlines for chain and Cascade operations.
-- `MaxRecvMsgSize`, `MaxSendMsgSize`, `MaxRetries` – transport tuning.
+- `MaxRecvMsgSize`, `MaxSendMsgSize`, `MaxRetries` – transport tuning. The default receive limit is 4 MiB; increase it only for endpoints that need larger query responses.
 - `WaitTx` – controls websocket vs polling behaviour when waiting for tx inclusion (see defaults in `client/config`).
 - `Logger` – optional; when set, SDK operations emit diagnostics.
 - `LogLevel` – default logging threshold when no custom logger is supplied (default: error).
