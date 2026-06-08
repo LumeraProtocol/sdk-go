@@ -23,6 +23,7 @@ go get github.com/LumeraProtocol/sdk-go
 - `WaitTx` – controls websocket vs polling behaviour when waiting for tx inclusion (see defaults in `client/config`).
 - `Logger` – optional; when set, SDK operations emit diagnostics.
 - `LogLevel` – default logging threshold when no custom logger is supplied (default: error).
+- `AccountHRP`, `FeeDenom`, `GasPrice` – chain economics. Empty/nil values fall back to Lumera defaults (`lumera`, `ulume`, `0.025`); set them for non-Lumera chains.
 - EVM settings: `EVMChainID`, `EVMNativeDenom`, `EVMExtendedDenom`, `EVMGasTipCap`, `EVMGasFeeCap`. See [evm.md](evm.md).
 
 Override fields with `client.With...` option helpers when calling `client.New`.

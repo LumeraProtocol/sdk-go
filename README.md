@@ -8,6 +8,7 @@ Official Go SDK for the Lumera Protocol - a next-generation blockchain platform 
 - 📦 Type-Safe — Full Go type definitions for all Lumera modules
 - 🚀 High-Level API — Simple methods for complex operations
 - 🔐 Secure — Built on Cosmos SDK's proven cryptography
+- ⚡ EVM-Ready — Ethereum-format transactions, ERC20 conversion, Lumera precompiles, and EVM-account migration (see the [EVM guide](docs/guides/evm.md))
 - 📝 Well-Documented — Comprehensive examples and documentation
 
 ## Unified APIs
@@ -294,11 +295,17 @@ See the [examples](./examples) directory for complete working examples:
 - [Query Actions](./examples/query-actions) - Query blockchain actions
 - [Claim Tokens](./examples/claim-tokens) - Claim tokens from old chain
 - [Multi-Account Factory](./examples/multi-account) - Reuse a config while swapping local signers
+- [EVM Balance](./examples/evm-balance) - Read EVM-side account state (balance, nonce, base fee)
+- [EVM Transfer](./examples/evm-transfer) - Send an Ethereum-format transaction
+- [ERC20 Convert](./examples/erc20-convert) - Convert between Cosmos coins and ERC20 tokens
+- [Precompile Action](./examples/precompile-action) - Call a Lumera precompile from EVM
+- [ICA Request / Approve](./examples/ica-request-tx) - Interchain-account action flows
 
 ## Documentation
 
 - [Developer Guide & Tutorials](docs/DEVELOPER_GUIDE.md)
 - [API Overview](docs/API.md)
+- Topic guides: [Getting Started](docs/guides/getting-started.md) · [Crypto](docs/guides/crypto.md) · [Actions](docs/guides/actions.md) · [Cascade](docs/guides/cascade.md) · [ICA](docs/guides/ica.md) · [EVM](docs/guides/evm.md)
 - [API Documentation](https://pkg.go.dev/github.com/LumeraProtocol/sdk-go)
 - [Lumera Documentation](https://docs.lumera.io)
 

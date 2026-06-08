@@ -16,8 +16,8 @@ Quick links by topic:
 ## Package `client`
 
 - `client.New(ctx, Config, keyring, opts...) (*Client, error)` builds a unified client exposing `Blockchain` and `Cascade`.
-- `Config` (alias of `client/config.Config`): chain endpoints, address/key, timeouts, wait-tx config, message sizes, retries, optional logger. The default gRPC receive limit is 4 MiB; callers can opt up when a chain endpoint needs larger responses.
-- Options: `WithChainID`, `WithKeyName`, `WithGRPCEndpoint`, `WithRPCEndpoint`, `WithBlockchainTimeout`, `WithStorageTimeout`, `WithMaxRetries`, `WithMaxMessageSize`, `WithWaitTxConfig`, `WithLogLevel`, `WithLogger`, `WithEVMChainID`, `WithEVMNativeDenom`, `WithEVMExtendedDenom`, `WithEVMGasCaps`.
+- `Config` (alias of `client/config.Config`): chain endpoints, address/key, timeouts, wait-tx config, message sizes, retries, optional logger, plus chain-economics overrides (`AccountHRP`, `FeeDenom`, `GasPrice`) that default to Lumera values when unset. The default gRPC receive limit is 4 MiB; callers can opt up when a chain endpoint needs larger responses.
+- Options: `WithChainID`, `WithKeyName`, `WithGRPCEndpoint`, `WithRPCEndpoint`, `WithBlockchainTimeout`, `WithStorageTimeout`, `WithMaxRetries`, `WithMaxMessageSize`, `WithWaitTxConfig`, `WithLogLevel`, `WithLogger`, `WithAccountHRP`, `WithFeeDenom`, `WithGasPrice`, `WithEVMChainID`, `WithEVMNativeDenom`, `WithEVMExtendedDenom`, `WithEVMGasCaps`.
 - `Client.Blockchain` is a `*blockchain.Client`; `Client.Cascade` is a `*cascade.Client`. `Close()` tears both down.
 - `NewFactory` captures a base config/keyring for multi-signer flows; `Factory.WithSigner` returns a per-signer `Client`.
 

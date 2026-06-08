@@ -18,8 +18,9 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Refactored the base transaction build/sign pipeline to support explicit transaction build options, manual signer metadata, simulation fallback, fee overrides, and multi-message validation.
+- Refactored the base transaction build/sign pipeline to support explicit transaction build options, manual signer metadata, simulation-based gas estimation, fee overrides, and multi-message validation.
 - Added configurable EVM options to the client configuration, including EVM chain ID, EVM native/extended denoms, and EVM gas caps.
+- Exposed chain-economics overrides on the top-level client config (`AccountHRP`, `FeeDenom`, `GasPrice`) via `WithAccountHRP`, `WithFeeDenom`, and `WithGasPrice`, forwarding them into the blockchain config (previously settable only at the blockchain layer).
 - Replaced the local ethsecp256k1 implementation with the cosmos/evm implementation and updated keyring handling for EVM keys.
 - Updated dependency pins for the EVM stack, including Lumera, Cosmos SDK, cosmos/evm, the forked go-ethereum replacement, and SuperNode SDK `v2.5.2`.
 - Kept local Lumera/SuperNode development `replace` directives commented out for release safety.
@@ -30,6 +31,12 @@ All notable changes to this project are documented in this file.
 - Fixed EVM denom resolution so transaction helpers can derive missing EVM denoms from chain params while still failing clearly when required values are unavailable.
 - Tightened EVM nonce, gas, and fee cap validation, including negative-value checks and large gas fee overflow coverage.
 - Hardened EVM API response handling for nil math values and malformed EVM transaction response data.
+- `ImportKey` now verifies that an existing key was derived from the supplied mnemonic, instead of silently returning the stored key when a different mnemonic is imported under the same name.
+- ERC20 read helpers (`Erc20Balance`/`Erc20TotalSupply`/`Erc20Allowance`/`Erc20Metadata`) return a clear error when the call target returns no data (no contract code or reverted), rather than a cryptic ABI unmarshal error.
+- Gas estimation now surfaces simulation failures instead of silently falling back to a fixed gas limit that could under-gas the transaction; callers can bypass via `GasLimit` or `SkipSimulation`.
+- `DeployContract` returns the zero address and an error when the constructor reverts, instead of an address where no contract was deployed.
+- `buildEthereumTxBytes` rejects an empty native denom (previously panicked in `sdk.NewCoin`), `FeeMarket.BlockGas` rejects negative gas, and `GasUsed` is guarded against negative-to-`uint64` wraparound.
+- The tx-wait helper surfaces the subscriber error when the poller also fails, preserving the more diagnostic root cause.
 - Fixed linter issues in EVM examples, ERC20 helpers, and EVM transaction tests.
 
 ### Tests

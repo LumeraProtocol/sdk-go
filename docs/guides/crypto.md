@@ -35,6 +35,8 @@ Use `ImportKey` to add a key to an existing keyring:
 pubBytes, addr, err := sdkcrypto.ImportKey(kr, "bob", "mnemonic.txt", "lumera", sdkcrypto.KeyTypeCosmos)
 ```
 
+`ImportKey` is idempotent: re-importing the same name with the same mnemonic and key type returns the existing key. It errors if the name already exists with a different key type **or** a different mnemonic, so a typo cannot silently return the wrong account.
+
 ## Mixing key types in the same keyring
 
 When controller and host chains use different cryptographic key types, import keys under separate names:

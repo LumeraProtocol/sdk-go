@@ -67,7 +67,7 @@ Overrides on `EthereumTxOptions`: `Nonce`, `GasLimit`, `GasTipCap`, `GasFeeCap`,
 Other helpers on `Blockchain.EVM`:
 
 - `CallContract(ctx, to, calldata)` — read-only ABI call (forwards to `EthCall`).
-- `DeployContract(ctx, bytecode, opts)` — contract creation; returns the deployed address (resolved before broadcast).
+- `DeployContract(ctx, bytecode, opts)` — contract creation; returns the deployed address (derived from sender + nonce). Returns the zero address and an error if the constructor reverts.
 - `RawEthereumTx(ctx, signedTx)` — broadcast a tx signed elsewhere (hardware wallet, MetaMask).
 
 `examples/evm-transfer` is a complete CLI.
