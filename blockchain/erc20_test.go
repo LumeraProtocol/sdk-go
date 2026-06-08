@@ -101,6 +101,24 @@ func TestErc20Reads_EmptyReturnData(t *testing.T) {
 	}
 }
 
+func TestErc20Reads_UnwiredClientReturnsError(t *testing.T) {
+	ctx := context.Background()
+	contract := common.HexToAddress("0x0000000000000000000000000000000000000abc")
+	holder := common.HexToAddress("0x0000000000000000000000000000000000000def")
+
+	for name, c := range map[string]*ERC20Client{
+		"nil base client": {},
+		"nil EVM client":  {client: &Client{}},
+	} {
+		if _, err := c.Erc20Balance(ctx, contract, holder); err == nil || !strings.Contains(err.Error(), "not wired") {
+			t.Fatalf("%s Erc20Balance: got %v, want not-wired error", name, err)
+		}
+		if _, err := c.Erc20Metadata(ctx, contract); err == nil || !strings.Contains(err.Error(), "not wired") {
+			t.Fatalf("%s Erc20Metadata: got %v, want not-wired error", name, err)
+		}
+	}
+}
+
 func TestNewMsgConvertCoin(t *testing.T) {
 	coin := sdk.NewCoin("ulume", sdkmath.NewInt(1_000_000))
 	receiver := common.HexToAddress("0x1234567890123456789012345678901234567890")

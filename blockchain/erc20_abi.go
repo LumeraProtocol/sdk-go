@@ -68,10 +68,6 @@ func (c *ERC20Client) Erc20Allowance(ctx context.Context, contract, owner, spend
 
 // Erc20Metadata returns name, symbol, decimals for the ERC20 contract.
 func (c *ERC20Client) Erc20Metadata(ctx context.Context, contract common.Address) (Erc20Metadata, error) {
-	if c.client == nil {
-		return Erc20Metadata{}, fmt.Errorf("ERC20Client not wired to a base.Client")
-	}
-
 	name, err := c.callString(ctx, contract, "name")
 	if err != nil {
 		return Erc20Metadata{}, fmt.Errorf("name: %w", err)
@@ -87,11 +83,15 @@ func (c *ERC20Client) Erc20Metadata(ctx context.Context, contract common.Address
 	return Erc20Metadata{Name: name, Symbol: symbol, Decimals: decimals}, nil
 }
 
-func (c *ERC20Client) callUint256(ctx context.Context, contract common.Address, method string, data []byte) (*big.Int, error) {
-	if c.client == nil {
-		return nil, fmt.Errorf("ERC20Client not wired to a base.Client")
+func (c *ERC20Client) callContract(ctx context.Context, contract common.Address, data []byte) ([]byte, error) {
+	if c.client == nil || c.client.EVM == nil {
+		return nil, fmt.Errorf("ERC20Client not wired to an EVM client")
 	}
-	ret, err := c.client.EVM.CallContract(ctx, contract, data)
+	return c.client.EVM.CallContract(ctx, contract, data)
+}
+
+func (c *ERC20Client) callUint256(ctx context.Context, contract common.Address, method string, data []byte) (*big.Int, error) {
+	ret, err := c.callContract(ctx, contract, data)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (c *ERC20Client) callString(ctx context.Context, contract common.Address, m
 	if err != nil {
 		return "", fmt.Errorf("pack %s: %w", method, err)
 	}
-	ret, err := c.client.EVM.CallContract(ctx, contract, data)
+	ret, err := c.callContract(ctx, contract, data)
 	if err != nil {
 		return "", err
 	}
@@ -137,7 +137,7 @@ func (c *ERC20Client) callUint8(ctx context.Context, contract common.Address, me
 	if err != nil {
 		return 0, fmt.Errorf("pack %s: %w", method, err)
 	}
-	ret, err := c.client.EVM.CallContract(ctx, contract, data)
+	ret, err := c.callContract(ctx, contract, data)
 	if err != nil {
 		return 0, err
 	}
