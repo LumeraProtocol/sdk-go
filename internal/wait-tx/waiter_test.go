@@ -3,6 +3,7 @@ package waittx
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,6 +63,23 @@ func TestWaiterFallsBackToPoller(t *testing.T) {
 	}
 	if poller.calls == 0 {
 		t.Fatalf("poller should have been invoked")
+	}
+}
+
+func TestWaiterCombinesSubscriberAndPollerErrors(t *testing.T) {
+	sub := &stubSource{err: errors.New("subscriber-boom")}
+	poller := &stubSource{err: errors.New("poller-boom")}
+	w := &Waiter{subscriber: sub, poller: poller, setupDelay: 10 * time.Millisecond}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	_, err := w.Wait(ctx, "hash", 0)
+	if err == nil {
+		t.Fatal("expected error when both subscriber and poller fail")
+	}
+	if msg := err.Error(); !strings.Contains(msg, "subscriber-boom") || !strings.Contains(msg, "poller-boom") {
+		t.Fatalf("error %q should mention both the subscriber and poller failures", msg)
 	}
 }
 

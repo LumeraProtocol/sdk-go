@@ -299,7 +299,15 @@ func (c *Client) resolveGasLimit(ctx context.Context, txCfg client.TxConfig, bui
 	}
 
 	gasUsed, simErr := c.Simulate(ctx, unsignedBytes)
-	if simErr != nil || gasUsed == 0 {
+	if simErr != nil {
+		// Don't silently fall back to a fixed gas limit: a failed simulation
+		// usually means the tx would fail on-chain, and guessing a default
+		// can under-gas it and produce an opaque on-chain error. Surface the
+		// reason and let callers opt out via SkipSimulation or an explicit
+		// GasLimit.
+		return 0, fmt.Errorf("simulate tx for gas estimation (set GasLimit or SkipSimulation to bypass): %w", simErr)
+	}
+	if gasUsed == 0 {
 		return defaultSignedTxGasLimit, nil
 	}
 

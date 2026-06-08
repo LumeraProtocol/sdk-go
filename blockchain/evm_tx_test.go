@@ -107,6 +107,49 @@ func TestBuildEthereumTxBytes_RequiresExtendedDenom(t *testing.T) {
 	require.Contains(t, err.Error(), "extended denom")
 }
 
+func TestBuildEthereumTxBytes_RequiresNativeDenom(t *testing.T) {
+	mnemonicFile := writeMnemonicForEVM(t)
+	kr, _, _, err := sdkcrypto.LoadKeyring("alice", mnemonicFile, sdkcrypto.KeyTypeEVM)
+	require.NoError(t, err)
+
+	chainID := big.NewInt(1414)
+	tx := ethtypes.NewTx(&ethtypes.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     3,
+		GasTipCap: big.NewInt(500_000_000),
+		GasFeeCap: big.NewInt(2_500_000_000),
+		Gas:       50_000,
+	})
+	signed, err := sdkcrypto.SignEthereumTx(kr, "alice", chainID, tx)
+	require.NoError(t, err)
+
+	// Both nativeDenom and the feeDenom fallback are empty: must error
+	// explicitly rather than silently build a tx with an empty fee denom.
+	_, err = buildEthereumTxBytes(signed, "", "alume", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "native denom")
+}
+
+func TestFinalizeDeployResult(t *testing.T) {
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	// Successful deploy: the pre-computed address passes through unchanged.
+	res := &EthereumTransactionResult{EthTxHash: common.Hash{0x1}}
+	got, gotRes, err := finalizeDeployResult(addr, res)
+	require.NoError(t, err)
+	require.Equal(t, addr, got)
+	require.Same(t, res, gotRes)
+
+	// Reverted deploy: no contract exists at addr, so return the zero address
+	// and an error, while still surfacing the result for revert inspection.
+	reverted := &EthereumTransactionResult{VMError: "execution reverted", ReturnData: []byte{0xde, 0xad}}
+	got, gotRes, err = finalizeDeployResult(addr, reverted)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "revert")
+	require.Equal(t, common.Address{}, got)
+	require.Same(t, reverted, gotRes)
+}
+
 func TestEthCreateAddress_MatchesGoEthereum(t *testing.T) {
 	sender := common.HexToAddress("0x1234567890123456789012345678901234567890")
 	require.Equal(t, ethcrypto.CreateAddress(sender, 0), ethCreateAddress(sender, 0))

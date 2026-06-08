@@ -42,5 +42,8 @@ func (c *FeeMarketClient) BlockGas(ctx context.Context) (int64, error) {
 	if resp == nil {
 		return 0, fmt.Errorf("empty block gas response")
 	}
+	if resp.Gas < 0 {
+		return 0, fmt.Errorf("block gas response is negative: %d", resp.Gas)
+	}
 	return resp.Gas, nil
 }

@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -238,6 +239,17 @@ func ImportKey(kr keyring.Keyring, keyName, mnemonicFile, hrp string, keyType Ke
 			return nil, "", fmt.Errorf("key %q already exists with algorithm %s, but %s (%s) was requested",
 				keyName, pub.Type(), keyType.String(), wantAlgo)
 		}
+		// Verify the existing key was derived from the supplied mnemonic.
+		// Without this check, importing a different mnemonic under an existing
+		// name would silently return the stored key's pubkey/address, leaving
+		// the caller operating on the wrong account.
+		derivedPub, err := pubKeyFromMnemonic(mnemonic, keyType)
+		if err != nil {
+			return nil, "", fmt.Errorf("derive pubkey from mnemonic: %w", err)
+		}
+		if !bytes.Equal(derivedPub.Bytes(), pub.Bytes()) {
+			return nil, "", fmt.Errorf("key %q already exists with a different mnemonic", keyName)
+		}
 	}
 
 	addr, err := AddressFromKey(kr, keyName, hrp)
@@ -305,6 +317,19 @@ func registerLegacyEthSecp256k1TypeURLs(reg codectypes.InterfaceRegistry) {
 		"/injective.crypto.v1beta1.ethsecp256k1.PrivKey",
 		&ethsecp256k1.PrivKey{},
 	)
+}
+
+// pubKeyFromMnemonic derives the public key for the given mnemonic and key
+// type without persisting anything to a keyring. It uses the same signing
+// algorithm and HD path that ImportKey/LoadKeyring use, so the result matches
+// a key created via kr.NewAccount with the same inputs.
+func pubKeyFromMnemonic(mnemonic string, keyType KeyType) (cryptotypes.PubKey, error) {
+	algo := keyType.SigningAlgo()
+	derivedPriv, err := algo.Derive()(mnemonic, "", keyType.HDPath())
+	if err != nil {
+		return nil, fmt.Errorf("derive private key: %w", err)
+	}
+	return algo.Generate()(derivedPriv).PubKey(), nil
 }
 
 func readMnemonicFile(mnemonicFile string) (string, error) {

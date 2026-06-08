@@ -3,12 +3,14 @@ package blockchain
 import (
 	"context"
 	"math/big"
+	"strings"
 	"testing"
 
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/query"
 	erc20types "github.com/cosmos/evm/x/erc20/types"
+	evmtypes "github.com/cosmos/evm/x/vm/types"
 	"github.com/ethereum/go-ethereum/common"
 	"google.golang.org/grpc"
 )
@@ -74,6 +76,28 @@ func TestERC20Client_Queries(t *testing.T) {
 	p, err := c.Params(ctx)
 	if err != nil || !p.Params.EnableErc20 {
 		t.Fatalf("Params: %v %+v", err, p)
+	}
+}
+
+// When CallContract returns empty data (the target address has no contract
+// code, or the call reverted without data), the ERC-20 read helpers must
+// surface a clear error rather than a cryptic ABI "empty string" error or a
+// silent zero value.
+func TestErc20Reads_EmptyReturnData(t *testing.T) {
+	evm := &EVMClient{query: &stubEVMQuery{ethCallResp: &evmtypes.MsgEthereumTxResponse{}}}
+	c := &ERC20Client{client: &Client{EVM: evm}}
+	ctx := context.Background()
+	contract := common.HexToAddress("0x0000000000000000000000000000000000000abc")
+	holder := common.HexToAddress("0x0000000000000000000000000000000000000def")
+
+	if _, err := c.Erc20Balance(ctx, contract, holder); err == nil || !strings.Contains(err.Error(), "no data") {
+		t.Fatalf("Erc20Balance empty-return: got %v, want error containing \"no data\"", err)
+	}
+	if _, err := c.Erc20TotalSupply(ctx, contract); err == nil || !strings.Contains(err.Error(), "no data") {
+		t.Fatalf("Erc20TotalSupply empty-return: got %v, want error containing \"no data\"", err)
+	}
+	if _, err := c.Erc20Metadata(ctx, contract); err == nil || !strings.Contains(err.Error(), "no data") {
+		t.Fatalf("Erc20Metadata empty-return: got %v, want error containing \"no data\"", err)
 	}
 }
 

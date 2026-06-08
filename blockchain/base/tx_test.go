@@ -45,6 +45,7 @@ type txBuildServer struct {
 	authtypes.UnimplementedQueryServer
 	mu               sync.Mutex
 	gasUsed          uint64
+	simErr           error
 	accountNumber    uint64
 	sequence         uint64
 	simulateCalls    int
@@ -79,6 +80,9 @@ func (s *txBuildServer) Simulate(context.Context, *txtypes.SimulateRequest) (*tx
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.simulateCalls++
+	if s.simErr != nil {
+		return nil, s.simErr
+	}
 	return &txtypes.SimulateResponse{
 		GasInfo: &abcipb.GasInfo{GasUsed: s.gasUsed},
 	}, nil
@@ -343,6 +347,96 @@ func TestBuildAndSignTxWithOptions_QueriesAccountInfoAndSimulates(t *testing.T) 
 	simCalls, acctCalls := handler.counts()
 	if simCalls != 1 || acctCalls != 1 {
 		t.Fatalf("unexpected query/simulate call counts: simulate=%d account_info=%d", simCalls, acctCalls)
+	}
+}
+
+func TestBuildAndSignTxWithOptions_SimulationErrorPropagates(t *testing.T) {
+	const bufSize = 1024 * 1024
+	lis := bufconn.Listen(bufSize)
+	srv := grpc.NewServer()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	handler := &txBuildServer{
+		simErr:        status.Error(codes.InvalidArgument, "insufficient funds"),
+		accountNumber: 3,
+		sequence:      4,
+	}
+	txtypes.RegisterServiceServer(srv, handler)
+	authtypes.RegisterQueryServer(srv, handler)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("dial bufnet: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	kr, addr := newSigningTestKeyring(t, "alice")
+	c := &Client{
+		conn:    conn,
+		keyring: kr,
+		keyName: "alice",
+		config: Config{
+			ChainID:    "lumera-devnet-1",
+			AccountHRP: constants.LumeraAccountHRP,
+			FeeDenom:   "ulume",
+			GasPrice:   sdkmath.LegacyMustNewDecFromStr("0.025"),
+		},
+	}
+
+	// A failed simulation must surface as an error, not silently fall back to
+	// the fixed default gas limit (which could under-gas the tx on-chain).
+	_, err = c.BuildAndSignTxWithOptions(context.Background(), TxBuildOptions{
+		Messages: []sdk.Msg{newMsgSend(addr, addr)},
+	})
+	if err == nil {
+		t.Fatal("expected simulation error to propagate, got nil")
+	}
+	if !strings.Contains(err.Error(), "insufficient funds") {
+		t.Fatalf("error %q should include the simulation failure reason", err)
+	}
+
+	// Setting an explicit gas limit must bypass simulation and succeed.
+	handler2 := &txBuildServer{accountNumber: 3, sequence: 4}
+	lis2 := bufconn.Listen(bufSize)
+	srv2 := grpc.NewServer()
+	t.Cleanup(func() {
+		srv2.Stop()
+		_ = lis2.Close()
+	})
+	txtypes.RegisterServiceServer(srv2, handler2)
+	authtypes.RegisterQueryServer(srv2, handler2)
+	go func() { _ = srv2.Serve(lis2) }()
+	conn2, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis2.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("dial bufnet: %v", err)
+	}
+	t.Cleanup(func() { _ = conn2.Close() })
+	c.conn = conn2
+
+	if _, err := c.BuildAndSignTxWithOptions(context.Background(), TxBuildOptions{
+		Messages: []sdk.Msg{newMsgSend(addr, addr)},
+		GasLimit: 50_000,
+	}); err != nil {
+		t.Fatalf("explicit GasLimit should bypass simulation: %v", err)
+	}
+	if sim, _ := handler2.counts(); sim != 0 {
+		t.Fatalf("explicit GasLimit should not call Simulate, got %d calls", sim)
 	}
 }
 

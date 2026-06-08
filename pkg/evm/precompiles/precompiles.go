@@ -79,7 +79,12 @@ func parseHardhatABI(raw []byte) (abi.ABI, error) {
 	var artifact struct {
 		ABI json.RawMessage `json:"abi"`
 	}
-	if err := json.Unmarshal(raw, &artifact); err == nil && len(artifact.ABI) > 0 {
+	// A Hardhat artifact has a non-null "abi" field. A bare ABI array
+	// unmarshals into the struct without populating ABI, so it falls through
+	// to the raw parse below. Guard against an explicit null so we don't try
+	// to parse the literal "null" as an ABI.
+	if err := json.Unmarshal(raw, &artifact); err == nil &&
+		len(artifact.ABI) > 0 && string(artifact.ABI) != "null" {
 		return abi.JSON(strings.NewReader(string(artifact.ABI)))
 	}
 	return abi.JSON(strings.NewReader(string(raw)))

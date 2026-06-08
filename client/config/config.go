@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	sdkmath "cosmossdk.io/math"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -20,6 +21,13 @@ type Config struct {
 	// Account settings
 	Address string // Your cosmos address (lumera1...)
 	KeyName string // Key name in keyring
+
+	// Chain economics overrides. Empty/nil values fall back to Lumera defaults
+	// applied by blockchain.New (AccountHRP "lumera", FeeDenom "ulume",
+	// GasPrice 0.025). Set these for non-Lumera chains.
+	AccountHRP string            // bech32 account prefix (Lumera: "lumera")
+	FeeDenom   string            // cosmos fee denom for non-EVM txs (Lumera: "ulume")
+	GasPrice   sdkmath.LegacyDec // gas price in FeeDenom/gas (Lumera: 0.025)
 
 	// Timeouts
 	BlockchainTimeout time.Duration

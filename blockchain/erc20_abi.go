@@ -95,12 +95,12 @@ func (c *ERC20Client) callUint256(ctx context.Context, contract common.Address, 
 	if err != nil {
 		return nil, err
 	}
+	if len(ret) == 0 {
+		return nil, fmt.Errorf("%s: contract %s returned no data (address has no code or call reverted)", method, contract)
+	}
 	out, err := erc20ABI.Unpack(method, ret)
 	if err != nil {
 		return nil, fmt.Errorf("unpack %s: %w", method, err)
-	}
-	if len(out) == 0 {
-		return new(big.Int), nil
 	}
 	bn, ok := out[0].(*big.Int)
 	if !ok {
@@ -118,12 +118,12 @@ func (c *ERC20Client) callString(ctx context.Context, contract common.Address, m
 	if err != nil {
 		return "", err
 	}
+	if len(ret) == 0 {
+		return "", fmt.Errorf("%s: contract %s returned no data (address has no code or call reverted)", method, contract)
+	}
 	out, err := erc20ABI.Unpack(method, ret)
 	if err != nil {
 		return "", fmt.Errorf("unpack %s: %w", method, err)
-	}
-	if len(out) == 0 {
-		return "", nil
 	}
 	s, ok := out[0].(string)
 	if !ok {
@@ -141,12 +141,12 @@ func (c *ERC20Client) callUint8(ctx context.Context, contract common.Address, me
 	if err != nil {
 		return 0, err
 	}
+	if len(ret) == 0 {
+		return 0, fmt.Errorf("%s: contract %s returned no data (address has no code or call reverted)", method, contract)
+	}
 	out, err := erc20ABI.Unpack(method, ret)
 	if err != nil {
 		return 0, fmt.Errorf("unpack %s: %w", method, err)
-	}
-	if len(out) == 0 {
-		return 0, nil
 	}
 	v, ok := out[0].(uint8)
 	if !ok {

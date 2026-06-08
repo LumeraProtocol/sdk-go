@@ -307,6 +307,18 @@ func (c *EVMClient) DeployContract(
 	if err != nil {
 		return common.Address{}, nil, err
 	}
+	return finalizeDeployResult(addr, res)
+}
+
+// finalizeDeployResult resolves the outcome of a contract deployment. The EVM
+// can revert a constructor while the surrounding cosmos tx still succeeds (fees
+// charged, VmError set in the response). In that case no contract exists at the
+// CREATE address, so return the zero address and an error while still surfacing
+// the result for revert-reason inspection.
+func finalizeDeployResult(addr common.Address, res *EthereumTransactionResult) (common.Address, *EthereumTransactionResult, error) {
+	if res != nil && res.VMError != "" {
+		return common.Address{}, res, fmt.Errorf("contract deployment reverted: %s", res.VMError)
+	}
 	return addr, res, nil
 }
 
@@ -382,7 +394,11 @@ func (c *EVMClient) RawEthereumTx(
 	}
 	if getResp != nil && getResp.TxResponse != nil {
 		res.Height = getResp.TxResponse.Height
-		res.GasUsed = uint64(getResp.TxResponse.GasUsed)
+		// GasUsed is int64 in the proto; a negative value is malformed and would
+		// wrap to a huge uint64. Clamp to 0 rather than propagate garbage.
+		if gu := getResp.TxResponse.GasUsed; gu > 0 {
+			res.GasUsed = uint64(gu)
+		}
 		if data := getResp.TxResponse.Data; len(data) > 0 {
 			decoded, derr := decodeMsgEthereumTxResponses([]byte(data))
 			if derr != nil {
@@ -500,10 +516,10 @@ func (c *EVMClient) resolveEVMDenoms(ctx context.Context, cfg Config) (string, s
 	}
 
 	if nativeDenom == "" {
-		return "", "", fmt.Errorf("EVM native denom is required")
+		return "", "", fmt.Errorf("EVM native denom could not be resolved from chain params; set EVMNativeDenom in the config")
 	}
 	if extendedDenom == "" {
-		return "", "", fmt.Errorf("EVM extended denom is required")
+		return "", "", fmt.Errorf("EVM extended denom could not be resolved from chain params; set EVMExtendedDenom in the config")
 	}
 	return nativeDenom, extendedDenom, nil
 }
@@ -519,6 +535,11 @@ func buildEthereumTxBytes(signed *ethtypes.Transaction, nativeDenom, extendedDen
 
 	if nativeDenom == "" {
 		nativeDenom = feeDenom
+	}
+	// Guard against empty denoms: sdk.NewCoin (called by BuildTxWithEvmParams)
+	// panics on an invalid/empty denom, so reject early with a clear error.
+	if nativeDenom == "" {
+		return nil, fmt.Errorf("EVM native denom is required")
 	}
 	if extendedDenom == "" {
 		return nil, fmt.Errorf("EVM extended denom is required")

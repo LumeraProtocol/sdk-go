@@ -48,6 +48,7 @@ func (w *Waiter) Wait(ctx context.Context, txHash string, timeout time.Duration)
 		defer cancel()
 	}
 
+	var subErr error
 	if w.subscriber != nil {
 		// Bound the subscriber lifetime to setupDelay. If the WS handshake
 		// or first event delivery has not landed by then we fall through to
@@ -75,7 +76,7 @@ func (w *Waiter) Wait(ctx context.Context, txHash string, timeout time.Duration)
 
 		select {
 		case <-subCtx.Done():
-		case <-errCh:
+		case subErr = <-errCh:
 		case res := <-resCh:
 			return res, nil
 		}
@@ -85,5 +86,12 @@ func (w *Waiter) Wait(ctx context.Context, txHash string, timeout time.Duration)
 	if w.poller == nil {
 		return Result{}, fmt.Errorf("poller is required")
 	}
-	return w.poller.Wait(ctx, txHash)
+	res, err := w.poller.Wait(ctx, txHash)
+	// If the subscriber failed early and the poller also failed, surface both:
+	// the subscriber error is often the more diagnostic root cause (e.g. WS
+	// connection refused) and would otherwise be silently discarded.
+	if err != nil && subErr != nil {
+		return res, fmt.Errorf("subscriber failed (%v); poller failed: %w", subErr, err)
+	}
+	return res, err
 }

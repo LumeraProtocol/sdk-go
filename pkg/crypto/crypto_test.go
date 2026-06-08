@@ -28,6 +28,18 @@ var testMnemonic = func() string {
 	return mnemonic
 }()
 
+// secondTestMnemonic is a valid mnemonic distinct from testMnemonic, used to
+// verify ImportKey rejects re-importing a different seed under an existing name.
+var secondTestMnemonic = func() string {
+	entropy := make([]byte, 32)
+	entropy[31] = 1
+	mnemonic, err := bip39.NewMnemonic(entropy)
+	if err != nil {
+		panic(err)
+	}
+	return mnemonic
+}()
+
 // ---------------------------------------------------------------------------
 // KeyType tests
 // ---------------------------------------------------------------------------
@@ -359,6 +371,32 @@ func TestImportKey_KeyTypeMismatch(t *testing.T) {
 	require.Contains(t, err.Error(), "already exists with algorithm")
 }
 
+func TestImportKey_RejectsMnemonicMismatch(t *testing.T) {
+	for _, keyType := range []KeyType{KeyTypeCosmos, KeyTypeEVM} {
+		t.Run(keyType.String(), func(t *testing.T) {
+			kr := newTestKeyring(t)
+
+			// Import alice from the canonical test mnemonic.
+			file1 := writeMnemonicFileWith(t, testMnemonic)
+			_, addr1, err := ImportKey(kr, "alice", file1, constants.LumeraAccountHRP, keyType)
+			require.NoError(t, err)
+
+			// Re-importing the SAME mnemonic stays idempotent.
+			_, addr1b, err := ImportKey(kr, "alice", file1, constants.LumeraAccountHRP, keyType)
+			require.NoError(t, err)
+			require.Equal(t, addr1, addr1b)
+
+			// Re-importing a DIFFERENT mnemonic under the same name must error,
+			// not silently return the already-stored key's address.
+			file2 := writeMnemonicFileWith(t, secondTestMnemonic)
+			_, addr2, err := ImportKey(kr, "alice", file2, constants.LumeraAccountHRP, keyType)
+			require.Error(t, err, "expected error when re-importing a different mnemonic")
+			require.Contains(t, err.Error(), "different mnemonic")
+			require.Empty(t, addr2)
+		})
+	}
+}
+
 func TestAddressFromKey_Errors(t *testing.T) {
 	kr := newTestKeyring(t)
 
@@ -559,7 +597,12 @@ func newTestKeyring(t *testing.T) keyring.Keyring {
 
 func writeMnemonicFile(t *testing.T) string {
 	t.Helper()
+	return writeMnemonicFileWith(t, testMnemonic)
+}
+
+func writeMnemonicFileWith(t *testing.T, mnemonic string) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "mnemonic.txt")
-	require.NoError(t, os.WriteFile(path, []byte(testMnemonic), 0o600))
+	require.NoError(t, os.WriteFile(path, []byte(mnemonic), 0o600))
 	return path
 }

@@ -31,6 +31,9 @@ func AddressFromKey(kr keyring.Keyring, keyName, hrp string) (string, error) {
 		return "", fmt.Errorf("nil pubkey for key %s", keyName)
 	}
 	addrBz := pub.Address()
+	if len(addrBz) == 0 {
+		return "", fmt.Errorf("pubkey for key %s produced an empty address", keyName)
+	}
 	bech, err := sdkbech32.ConvertAndEncode(hrp, addrBz)
 	if err != nil {
 		return "", fmt.Errorf("bech32 encode: %w", err)

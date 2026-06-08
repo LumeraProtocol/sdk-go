@@ -322,6 +322,50 @@ func TestEVMClient_ResolveEVMDenoms_QueryParamsWhenConfigMissing(t *testing.T) {
 	}
 }
 
+func TestEVMClient_ResolveEVMDenoms_ConfigShortCircuitsQuery(t *testing.T) {
+	// query is nil on purpose: when both denoms are configured, resolveEVMDenoms
+	// must not touch the query client.
+	evm := &EVMClient{}
+	nativeDenom, extendedDenom, err := evm.resolveEVMDenoms(context.Background(), Config{
+		EVMNativeDenom:   "ulume",
+		EVMExtendedDenom: "alume",
+	})
+	if err != nil {
+		t.Fatalf("resolveEVMDenoms: %v", err)
+	}
+	if nativeDenom != "ulume" || extendedDenom != "alume" {
+		t.Fatalf("denoms = %q/%q, want ulume/alume", nativeDenom, extendedDenom)
+	}
+}
+
+func TestEVMClient_ResolveEVMDenoms_NoQueryNoConfig(t *testing.T) {
+	evm := &EVMClient{}
+	_, _, err := evm.resolveEVMDenoms(context.Background(), Config{})
+	if err == nil {
+		t.Fatalf("expected error when query client and config denoms are both absent")
+	}
+	if !strings.Contains(err.Error(), "EVMNativeDenom") {
+		t.Fatalf("error %q should mention the config field to set", err)
+	}
+}
+
+func TestEVMClient_ResolveEVMDenoms_MissingExtendedDenom(t *testing.T) {
+	// Chain returns the native denom but no ExtendedDenomOptions, and config
+	// supplies neither: resolveEVMDenoms must surface a clear extended-denom error.
+	evm := &EVMClient{query: &stubEVMQuery{
+		paramsResp: &evmtypes.QueryParamsResponse{Params: evmtypes.Params{
+			EvmDenom: "ulume",
+		}},
+	}}
+	_, _, err := evm.resolveEVMDenoms(context.Background(), Config{})
+	if err == nil {
+		t.Fatalf("expected error when extended denom cannot be resolved")
+	}
+	if !strings.Contains(err.Error(), "extended denom") {
+		t.Fatalf("error %q should mention extended denom", err)
+	}
+}
+
 func TestEncodeEthCallArgs_RejectsNegativeValue(t *testing.T) {
 	_, err := encodeEthCallArgs(common.Address{}, nil, nil, big.NewInt(-1))
 	if err == nil {
@@ -449,6 +493,15 @@ func TestFeeMarketClient_Queries(t *testing.T) {
 	g, err := c.BlockGas(ctx)
 	if err != nil || g != 250_000 {
 		t.Fatalf("BlockGas: %v %d", err, g)
+	}
+}
+
+func TestFeeMarketClient_BlockGas_RejectsNegative(t *testing.T) {
+	c := &FeeMarketClient{query: &stubFeeMarketQuery{
+		gas: &feemarkettypes.QueryBlockGasResponse{Gas: -1},
+	}}
+	if _, err := c.BlockGas(context.Background()); err == nil {
+		t.Fatal("expected error for negative block gas")
 	}
 }
 
