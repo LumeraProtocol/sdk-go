@@ -26,8 +26,8 @@ func (c *EVMigrationClient) Params(ctx context.Context) (*evmigrationtypes.Query
 	return c.query.Params(ctx, &evmigrationtypes.QueryParamsRequest{})
 }
 
-// MigrationRecord returns the migration record for a legacy address, or nil if
-// the account has not been migrated.
+// MigrationRecord returns the migration record for a legacy address.
+// If no record exists, the underlying query returns its gRPC error.
 func (c *EVMigrationClient) MigrationRecord(ctx context.Context, legacyAddress string) (*evmigrationtypes.QueryMigrationRecordResponse, error) {
 	return c.query.MigrationRecord(ctx, &evmigrationtypes.QueryMigrationRecordRequest{
 		LegacyAddress: legacyAddress,
@@ -35,7 +35,7 @@ func (c *EVMigrationClient) MigrationRecord(ctx context.Context, legacyAddress s
 }
 
 // MigrationRecordByNewAddress returns the migration record for a migrated
-// destination address, or nil if the address was not used as a migration target.
+// destination address. If no record exists, the underlying query returns its gRPC error.
 func (c *EVMigrationClient) MigrationRecordByNewAddress(ctx context.Context, newAddress string) (*evmigrationtypes.QueryMigrationRecordByNewAddressResponse, error) {
 	return c.query.MigrationRecordByNewAddress(ctx, &evmigrationtypes.QueryMigrationRecordByNewAddressRequest{
 		NewAddress: newAddress,

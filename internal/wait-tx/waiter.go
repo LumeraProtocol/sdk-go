@@ -49,12 +49,23 @@ func (w *Waiter) Wait(ctx context.Context, txHash string, timeout time.Duration)
 	}
 
 	if w.subscriber != nil {
+		// Bound the subscriber lifetime to setupDelay. If the WS handshake
+		// or first event delivery has not landed by then we fall through to
+		// the gRPC poller. Critically, the spawned goroutine MUST receive
+		// subCtx (not the outer ctx) so that when this select returns via
+		// the subCtx.Done() arm, the subscriber.Wait call inside the
+		// goroutine unwinds promptly and its deferred client.Stop() runs.
+		// Passing the outer ctx here was the root cause of the WS-socket
+		// leak observed on lumera-devnet-1 val3 (~2562 sockets / 11 days):
+		// subCtx fired after 5s, the caller fell through to the poller,
+		// but the goroutine kept blocking on <-ch for the lifetime of the
+		// outer ctx (often unbounded), pinning one rpchttp client open.
 		subCtx, cancel := context.WithTimeout(ctx, w.setupDelay)
 		defer cancel()
 		resCh := make(chan Result, 1)
 		errCh := make(chan error, 1)
 		go func() {
-			res, err := w.subscriber.Wait(ctx, txHash)
+			res, err := w.subscriber.Wait(subCtx, txHash)
 			if err != nil {
 				errCh <- err
 				return

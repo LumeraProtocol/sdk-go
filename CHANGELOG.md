@@ -21,7 +21,7 @@ All notable changes to this project are documented in this file.
 - Refactored the base transaction build/sign pipeline to support explicit transaction build options, manual signer metadata, simulation fallback, fee overrides, and multi-message validation.
 - Added configurable EVM options to the client configuration, including EVM chain ID, EVM native/extended denoms, and EVM gas caps.
 - Replaced the local ethsecp256k1 implementation with the cosmos/evm implementation and updated keyring handling for EVM keys.
-- Updated dependency pins for the EVM stack, including Lumera, Cosmos SDK, cosmos/evm, the forked go-ethereum replacement, and SuperNode SDK.
+- Updated dependency pins for the EVM stack, including Lumera, Cosmos SDK, cosmos/evm, the forked go-ethereum replacement, and SuperNode SDK `v2.5.2`.
 - Kept local Lumera/SuperNode development `replace` directives commented out for release safety.
 
 ### Fixed

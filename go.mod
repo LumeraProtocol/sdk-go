@@ -23,7 +23,7 @@ require (
 	github.com/LumeraProtocol/lumera v1.20.0-rc2
 
 	// SuperNode SDK for storage operations
-	github.com/LumeraProtocol/supernode/v2 v2.5.0-rc
+	github.com/LumeraProtocol/supernode/v2 v2.5.2
 	github.com/cometbft/cometbft v0.38.21
 	github.com/cosmos/cosmos-sdk v0.53.6
 	github.com/cosmos/evm v0.6.0
