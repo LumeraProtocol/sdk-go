@@ -2,11 +2,21 @@ package blockchain
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
+	"time"
 
+	abcipb "cosmossdk.io/api/cosmos/base/abci/v1beta1"
+	txtypes "cosmossdk.io/api/cosmos/tx/v1beta1"
 	evmigrationtypes "github.com/LumeraProtocol/lumera/x/evmigration/types"
+	blockbase "github.com/LumeraProtocol/sdk-go/blockchain/base"
+	clientconfig "github.com/LumeraProtocol/sdk-go/client/config"
+	"github.com/LumeraProtocol/sdk-go/constants"
+	sdkcrypto "github.com/LumeraProtocol/sdk-go/pkg/crypto"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,15 +29,24 @@ type fakeEVMigrationServer struct {
 
 	mu sync.Mutex
 
-	params              *evmigrationtypes.QueryParamsResponse
-	record              *evmigrationtypes.QueryMigrationRecordResponse
-	recordByNewAddress  *evmigrationtypes.QueryMigrationRecordByNewAddressResponse
-	estimate            *evmigrationtypes.QueryMigrationEstimateResponse
-	stats               *evmigrationtypes.QueryMigrationStatsResponse
-	notFound            bool
-	lastLegacyAddress   string
-	lastNewAddress      string
-	lastEstimateLegacy  string
+	params             *evmigrationtypes.QueryParamsResponse
+	record             *evmigrationtypes.QueryMigrationRecordResponse
+	recordByNewAddress *evmigrationtypes.QueryMigrationRecordByNewAddressResponse
+	estimate           *evmigrationtypes.QueryMigrationEstimateResponse
+	stats              *evmigrationtypes.QueryMigrationStatsResponse
+	notFound           bool
+	lastLegacyAddress  string
+	lastNewAddress     string
+	lastEstimateLegacy string
+}
+
+type evmigrationTxServer struct {
+	txtypes.UnimplementedServiceServer
+	authtypes.UnimplementedQueryServer
+
+	mu      sync.Mutex
+	address string
+	txBytes [][]byte
 }
 
 func (s *fakeEVMigrationServer) Params(_ context.Context, _ *evmigrationtypes.QueryParamsRequest) (*evmigrationtypes.QueryParamsResponse, error) {
@@ -72,6 +91,53 @@ func (s *fakeEVMigrationServer) reads() (legacy, newAddr, estimateLegacy string)
 	return s.lastLegacyAddress, s.lastNewAddress, s.lastEstimateLegacy
 }
 
+func (s *evmigrationTxServer) Simulate(context.Context, *txtypes.SimulateRequest) (*txtypes.SimulateResponse, error) {
+	return &txtypes.SimulateResponse{
+		GasInfo: &abcipb.GasInfo{GasUsed: 1000},
+	}, nil
+}
+
+func (s *evmigrationTxServer) AccountInfo(context.Context, *authtypes.QueryAccountInfoRequest) (*authtypes.QueryAccountInfoResponse, error) {
+	s.mu.Lock()
+	sequence := uint64(len(s.txBytes))
+	s.mu.Unlock()
+
+	return &authtypes.QueryAccountInfoResponse{
+		Info: &authtypes.BaseAccount{
+			Address:       s.address,
+			AccountNumber: 7,
+			Sequence:      sequence,
+		},
+	}, nil
+}
+
+func (s *evmigrationTxServer) BroadcastTx(_ context.Context, req *txtypes.BroadcastTxRequest) (*txtypes.BroadcastTxResponse, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.txBytes = append(s.txBytes, append([]byte(nil), req.TxBytes...))
+	return &txtypes.BroadcastTxResponse{
+		TxResponse: &abcipb.TxResponse{Txhash: fmt.Sprintf("HASH_%d", len(s.txBytes))},
+	}, nil
+}
+
+func (s *evmigrationTxServer) GetTx(_ context.Context, req *txtypes.GetTxRequest) (*txtypes.GetTxResponse, error) {
+	return &txtypes.GetTxResponse{
+		TxResponse: &abcipb.TxResponse{Txhash: req.Hash, Height: 12},
+	}, nil
+}
+
+func (s *evmigrationTxServer) capturedTxBytes() [][]byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([][]byte, len(s.txBytes))
+	for i := range s.txBytes {
+		out[i] = append([]byte(nil), s.txBytes[i]...)
+	}
+	return out
+}
+
 func newEVMigrationTestClient(t *testing.T, handler *fakeEVMigrationServer) *EVMigrationClient {
 	t.Helper()
 
@@ -103,6 +169,46 @@ func newEVMigrationTestClient(t *testing.T, handler *fakeEVMigrationServer) *EVM
 	return &EVMigrationClient{
 		query: evmigrationtypes.NewQueryClient(conn),
 	}
+}
+
+func newEVMigrationTxTestClient(t *testing.T, handler *evmigrationTxServer, keyName string) *Client {
+	t.Helper()
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	srv := grpc.NewServer()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	txtypes.RegisterServiceServer(srv, handler)
+	authtypes.RegisterQueryServer(srv, handler)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+
+	kr, addr := newCosmosSigningKeyringForEVM(t, keyName)
+	handler.address = addr
+	baseClient, err := blockbase.New(context.Background(), blockbase.Config{
+		ChainID:      "lumera-devnet-1",
+		GRPCAddr:     lis.Addr().String(),
+		AccountHRP:   constants.LumeraAccountHRP,
+		InsecureGRPC: true,
+		WaitTx: clientconfig.WaitTxConfig{
+			PollInterval:          time.Millisecond,
+			PollMaxRetries:        1,
+			PollBackoffMultiplier: 1,
+		},
+	}, kr, keyName)
+	if err != nil {
+		t.Fatalf("base.New: %v", err)
+	}
+	t.Cleanup(func() { _ = baseClient.Close() })
+
+	return &Client{Client: baseClient}
 }
 
 func TestEVMigrationClient_Params(t *testing.T) {
@@ -266,5 +372,56 @@ func TestNewMsgMigrateValidator(t *testing.T) {
 	msg := NewMsgMigrateValidator("new", "legacy", legacyProof, newProof)
 	if msg.NewAddress != "new" || msg.LegacyAddress != "legacy" {
 		t.Fatalf("unexpected msg: %+v", msg)
+	}
+}
+
+func TestEVMigrationTxHelpers_BuildZeroFeeTxs(t *testing.T) {
+	handler := &evmigrationTxServer{}
+	c := newEVMigrationTxTestClient(t, handler, "alice")
+	newAddr := handler.address
+	legacyAddr := "lumera1legacyaddrxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+	helpers := []struct {
+		name string
+		run  func(context.Context) (*MigrationResult, error)
+	}{
+		{
+			name: "claim legacy account",
+			run: func(ctx context.Context) (*MigrationResult, error) {
+				msg := NewMsgClaimLegacyAccount(newAddr, legacyAddr, evmigrationtypes.MigrationProof{}, evmigrationtypes.MigrationProof{})
+				return c.ClaimLegacyAccountTx(ctx, msg, "claim")
+			},
+		},
+		{
+			name: "migrate validator",
+			run: func(ctx context.Context) (*MigrationResult, error) {
+				msg := NewMsgMigrateValidator(newAddr, legacyAddr, evmigrationtypes.MigrationProof{}, evmigrationtypes.MigrationProof{})
+				return c.MigrateValidatorTx(ctx, msg, "validator")
+			},
+		},
+	}
+
+	for _, helper := range helpers {
+		if _, err := helper.run(context.Background()); err != nil {
+			t.Fatalf("%s: %v", helper.name, err)
+		}
+	}
+
+	txBytes := handler.capturedTxBytes()
+	if len(txBytes) != len(helpers) {
+		t.Fatalf("captured %d txs, want %d", len(txBytes), len(helpers))
+	}
+	for i, raw := range txBytes {
+		decoded, err := sdkcrypto.NewDefaultTxConfig().TxDecoder()(raw)
+		if err != nil {
+			t.Fatalf("decode tx %d: %v", i, err)
+		}
+		feeTx, ok := decoded.(sdk.FeeTx)
+		if !ok {
+			t.Fatalf("tx %d does not implement sdk.FeeTx", i)
+		}
+		if !feeTx.GetFee().Empty() {
+			t.Fatalf("tx %d fee = %s, want zero fee", i, feeTx.GetFee())
+		}
 	}
 }
