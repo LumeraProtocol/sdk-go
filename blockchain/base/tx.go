@@ -366,7 +366,6 @@ func (c *Client) GetTxsByEvents(ctx context.Context, events []string, page, limi
 	}
 	query := strings.Join(filtered, " AND ")
 	req := &txtypes.GetTxsEventRequest{
-		Events:  append([]string(nil), filtered...),
 		Query:   query,
 		OrderBy: txtypes.OrderBy_ORDER_BY_DESC,
 	}
